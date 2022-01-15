@@ -991,7 +991,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             List<ConsumerRecord<K, V>> records = workContainerBatch.stream()
                     .map(WorkContainer::getCr)
                     .collect(Collectors.toList());
-            log.trace("Pool received: {}", workContainerBatch);
 
             //
             boolean workIsStale = wm.checkIfWorkIsStale(workContainerBatch);
@@ -1004,11 +1003,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             resultsFromUserFunction = usersFunction.apply(records);
 
             for (final WorkContainer<K, V> kvWorkContainer : workContainerBatch) {
-                onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
-            }
-            resultsFromUserFunction = usersFunction.apply(records);
-
-            for (var kvWorkContainer : workContainerBatch) {
                 onUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
             }
 
