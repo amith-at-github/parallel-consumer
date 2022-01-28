@@ -188,6 +188,15 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     // todo refactor - move into it's own class perhaps
     public List<WorkContainer<K, V>> maybeGetWorkIfAvailable(int requestedMaxWorkToRetrieve) {
+        // TODO: this is just a temporary solution to allow for more messages to arrive before batches are created.
+        // This ensures an average batch size that is more close to the requested batch size, since this method will
+        // return more work. Probably this should be refactored to be part of the method "tryToEnsureAvailableCapacity".
+        // TODO: Also we should only wait in case not enough records are present.
+        try {
+            Thread.sleep(getOptions().getProcessorDelayMs());
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         int workToGetDelta = requestedMaxWorkToRetrieve;
 
         // optimise early
