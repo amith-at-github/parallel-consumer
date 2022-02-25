@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.state;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.LoopingResumingIterator;
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -384,10 +385,11 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * Have our partitions been revoked? Can a batch contain messages of different epochs?
      *
      * @return true if any epoch is stale, false if not
+     * @see #checkIfWorkIsStale(WorkContainer)
      */
-    public boolean checkEpochIsStale(final List<WorkContainer<K, V>> workContainers) {
+    public boolean checkIfWorkIsStale(final List<WorkContainer<K, V>> workContainers) {
         for (final WorkContainer<K, V> workContainer : workContainers) {
-            if (checkEpochIsStale(workContainer)) return true;
+            if (checkIfWorkIsStale(workContainer)) return true;
         }
         return false;
     }
@@ -407,7 +409,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     /**
      * @return true if there's enough messages downloaded from the broker already to satisfy the pipeline, false if more
-     *         should be downloaded (or pipelined in the Consumer)
+     * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
         return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
@@ -483,4 +485,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public boolean isSystemIdle() {
         return getNumberRecordsOutForProcessing() == 0;
     }
+
+    public WorkContainer<K, V> getWorkContainerFor(ConsumerRecord<K, V> rec) {
+        ShardManager<K, V> shard = getSm();
+        return shard.getWorkContainerForRecord(rec);
+    }
+
 }
