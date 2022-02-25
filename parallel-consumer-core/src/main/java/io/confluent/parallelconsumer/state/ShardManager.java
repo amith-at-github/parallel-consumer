@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 
 /**
@@ -51,6 +52,7 @@ public class ShardManager<K, V> {
      * @see WorkManager#maybeGetWorkIfAvailable()
      */
     // todo performance: disable/remove if using partition order
+    // todo introduce an actual Shard object to store the map, will make things clearer
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
 
     /**
@@ -85,15 +87,25 @@ public class ShardManager<K, V> {
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
     public int getWorkQueuedInShardsCount() {
-        return this.processingShards.values().stream()
-                .mapToInt(Map::size)
-                .sum();
+        long count = this.processingShards.values().parallelStream()
+                .flatMap(x -> x.values().stream())
+                // missing pm.isBlocked(topicPartition) ?
+                .filter(WorkContainer::isAvailableToTakeAsWork)
+                .count();
+//                .mapToInt(Map::size)
+//                .sum();
+        // todo ew refactor to use longs
+        if (count > Integer.MAX_VALUE) {
+            throw new IllegalStateException(msg("Bug: too many messages to count {} - bigger than Integer", count));
+        }
+        return (int) count;
     }
 
     public boolean workIsWaitingToBeProcessed() {
-        Collection<NavigableMap<Long, WorkContainer<K, V>>> values = processingShards.values();
-        for (NavigableMap<Long, WorkContainer<K, V>> value : values) {
-            if (!value.isEmpty())
+        Collection<NavigableMap<Long, WorkContainer<K, V>>> allShards = processingShards.values();
+        for (NavigableMap<Long, WorkContainer<K, V>> oneShard : allShards) {
+            if (oneShard.values().parallelStream()
+                    .anyMatch(WorkContainer::isAvailableToTakeAsWork))
                 return true;
         }
         return false;
@@ -118,11 +130,16 @@ public class ShardManager<K, V> {
 
     public void addWorkContainer(final WorkContainer<K, V> wc) {
         Object shardKey = computeShardKey(wc.getCr());
-        processingShards.computeIfAbsent(shardKey,
-                        // uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some
-                        // concurrency errors (missing WorkContainers)
-                        (ignore) -> new ConcurrentSkipListMap<>())
-                .put(wc.offset(), wc);
+        var shard = processingShards.computeIfAbsent(shardKey,
+                // uses a ConcurrentSkipListMap instead of a TreeMap as under high pressure there appears to be some
+                // concurrency errors (missing WorkContainers)
+                (ignore) -> new ConcurrentSkipListMap<>());
+        long key = wc.offset();
+        if (shard.containsKey(key)) {
+            log.debug("Entry for {} already exists in shard queue", wc);
+        } else {
+            shard.put(key, wc);
+        }
     }
 
     void removeShard(final Object key) {
@@ -136,6 +153,7 @@ public class ShardManager<K, V> {
         if (shardOptional.isPresent()) {
             long offset = cr.offset();
             var shard = shardOptional.get();
+            // remove work from shard's queue
             shard.remove(offset);
             // If using KEY ordering, where the shard key is a message key, garbage collect old shard keys (i.e. KEY ordering we may never see a message for this key again)
             boolean keyOrdering = options.getOrdering().equals(KEY);
@@ -152,7 +170,8 @@ public class ShardManager<K, V> {
      * Idempotent - work may have not been removed, either way it's put back
      */
     public void onFailure(WorkContainer<K, V> wc) {
-        log.debug("Work FAILED, returning to shard");
-        addWorkContainer(wc);
+        log.debug("Work FAILED, no-op");
+//        log.debug("Work FAILED, returning to shard");
+//        addWorkContainer(wc); // todo: remove? WCs are never removed anymore?
     }
 }

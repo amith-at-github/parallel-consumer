@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
@@ -85,7 +86,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * The pool which is used for running the users's supplied function
      */
-    protected final ThreadPoolExecutor workerPool;
+    protected final ThreadPoolExecutor workerThreadPool;
 
     private Optional<Future<Boolean>> controlThreadFuture = Optional.empty();
 
@@ -193,14 +194,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         options = newOptions;
         options.validate();
 
-        this.dynamicExtraLoadFactor = new DynamicLoadFactor(options);
+//        this.dynamicExtraLoadFactor = new DynamicLoadFactor(options);
+        this.dynamicExtraLoadFactor = new DynamicLoadFactor();
         this.consumer = options.getConsumer();
 
         checkGroupIdConfigured(consumer);
         checkNotSubscribed(consumer);
         checkAutoCommitIsDisabled(consumer);
 
-        workerPool = setupWorkerPool(newOptions.getMaxConcurrency());
+        workerThreadPool = setupWorkerPool(newOptions.getMaxConcurrency());
 
         this.wm = new WorkManager<K, V>(newOptions, consumer, dynamicExtraLoadFactor);
 
@@ -437,7 +439,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         producerManager.ifPresent(x -> x.close(timeout));
 
         log.debug("Shutting down execution pool...");
-        List<Runnable> unfinished = workerPool.shutdownNow();
+        List<Runnable> unfinished = workerThreadPool.shutdownNow();
         if (!unfinished.isEmpty()) {
             log.warn("Threads not done count: {}", unfinished.size());
         }
@@ -447,12 +449,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         while (interrupted) {
             log.debug("Still interrupted");
             try {
-                boolean terminationFinishedWithoutTimeout = workerPool.awaitTermination(toSeconds(timeout), SECONDS);
+                boolean terminationFinishedWithoutTimeout = workerThreadPool.awaitTermination(toSeconds(timeout), SECONDS);
                 interrupted = false;
                 if (!terminationFinishedWithoutTimeout) {
                     log.warn("Thread execution pool termination await timeout ({})! Were any processing jobs dead locked or otherwise stuck?", timeout);
-                    boolean shutdown = workerPool.isShutdown();
-                    boolean terminated = workerPool.isTerminated();
+                    boolean shutdown = workerThreadPool.isShutdown();
+                    boolean terminated = workerThreadPool.isTerminated();
                 }
             } catch (InterruptedException e) {
                 log.error("InterruptedException", e);
@@ -672,9 +674,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         //
         queueStatsLimiter.performIfNotLimited(() -> {
-            int queueSize = getWorkerQueueSize();
+            int queueSize = getNumberOfUserFunctionsQueued();
             log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
-                    workerPool.getActiveCount(), queueSize, queueSize, getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+                    workerThreadPool.getActiveCount(), queueSize, queueSize, getPoolConcurrencyTarget(), dynamicExtraLoadFactor.getCurrentFactor());
         });
 
         return gotWorkCount;
@@ -689,11 +691,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                                         Consumer<R> callback,
                                         List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
-            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerPool);
+            log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
             if (options.getBatchSize().isPresent()) {
                 // perf: could inline makeBatches
                 var batches = makeBatches(workToProcess);
+                var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
+                log.info("num batches: {} smallest {} sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
                 for (var batch : batches) {
+                    int target = (int) options.getBatchSize().get();
+                    int size = batch.size();
                     submitWorkToPoolInner(usersFunction, callback, batch);
                 }
             } else {
@@ -707,7 +713,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private <R> void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction, final Consumer<R> callback, final List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
         log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerPool.submit(() -> {
+        Future outputRecordFuture = workerThreadPool.submit(() -> {
             addInstanceMDC();
             return runUserFunction(usersFunction, callback, batch);
         });
@@ -718,7 +724,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private List<List<WorkContainer<K, V>>> makeBatches(List<WorkContainer<K, V>> workToProcess) {
-        return partition(workToProcess, (int) options.getBatchSize().get());
+        int maxBatchSize = (int) options.getBatchSize().get();
+        return partition(workToProcess, maxBatchSize);
     }
 
     private static <T> List<List<T>> partition(Collection<T> sourceCollection, int maxBatchSize) {
@@ -750,15 +757,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
 
     /**
-     * Pluggable interface for instructing the framework how many work units to attempt to retreive from the work
-     * manager for this control loop
+     * Pluggable interface for instructing the framework how many work units to attempt to retrieve from the {@link
+     * WorkManager} for this control loop
      *
      * @return number of {@link WorkContainer} to try to get
      */
     protected int calculateQuantityToRequest() {
         int target = getQueueTargetLoaded();
-        BlockingQueue<Runnable> queue = workerPool.getQueue();
-        int current = queue.size();
+        int current = wm.getNumberRecordsOutForProcessing();
         int delta = target - current;
 
         log.debug("Loop: Will try to get work - target: {}, current queue size: {}, requesting: {}, loading factor: {}",
@@ -767,7 +773,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private int getQueueTargetLoaded() {
-        return getPoolQueueTarget() * dynamicExtraLoadFactor.getCurrentFactor();
+        int batch = (int) options.getBatchSize().orElse(1);
+        return getPoolConcurrencyTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
     }
 
     /**
@@ -778,7 +785,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
                             "if (isPoolQueueLow() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {} && lastWorkRequestWasFulfilled {}))",
-                    getWorkerQueueSize(),
+                    getNumberOfUserFunctionsQueued(),
                     getQueueTargetLoaded(),
                     dynamicExtraLoadFactor.getCurrentFactor(),
                     isPoolQueueLow(),
@@ -791,7 +798,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
-                        getWorkerQueueSize(), getPoolQueueTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+                        getNumberOfUserFunctionsQueued(), getPoolConcurrencyTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
                 log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
             }
@@ -801,16 +808,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * @return aim to never have the pool queue drop below this
      */
-    private int getPoolQueueTarget() {
+    private int getPoolConcurrencyTarget() {
+        //noinspection unchecked - lombok builder erases the generis of batchSize
+        int effectiveBatchSize = (int) options.getBatchSize().orElse(1);
+//        return options.getMaxConcurrency() * effectiveBatchSize;
         return options.getMaxConcurrency();
     }
 
     private boolean isPoolQueueLow() {
-        int queueSize = getWorkerQueueSize();
-        int queueTarget = getPoolQueueTarget();
+        int queueSize = getNumberOfUserFunctionsQueued();
+        int queueTarget = getPoolConcurrencyTarget();
         boolean workAmountBelowTarget = queueSize <= queueTarget;
         boolean hasWorkInMailboxes = wm.hasWorkInMailboxes();
-        log.debug("workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
+        log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
                 workAmountBelowTarget, queueSize, queueTarget, hasWorkInMailboxes);
         return workAmountBelowTarget && hasWorkInMailboxes;
     }
@@ -851,10 +861,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         try {
             boolean workAvailable = wm.hasWorkInMailboxes() && wm.isSystemIdle();
             boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running) && !workAvailable;
+
             if (noWorkToDoAndStillRunning) {
                 if (log.isDebugEnabled()) {
                     log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                            timeout, workerPool.getActiveCount(), getWorkerQueueSize());
+                            timeout, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
                 }
                 currentlyPollingWorkCompleteMailBox.getAndSet(true);
                 // wait for work, with a timeout for sanity
@@ -924,8 +935,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private int getWorkerQueueSize() {
-        return workerPool.getQueue().size();
+    private int getNumberOfUserFunctionsQueued() {
+        return workerThreadPool.getQueue().size();
     }
 
     /**
@@ -950,7 +961,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // draining is a normal running mode for the controller
         if (state == running || state == draining) {
             Duration timeSinceLastCommit = getTimeSinceLastCommit();
+            //noinspection SimplifyOptionalCallChains
+//            if (!timeSinceLastCommit.isPresent()) {
+//                return getTimeBetweenCommits();
+//            }
             Duration timeBetweenCommits = getTimeBetweenCommits();
+            @SuppressWarnings("UnnecessaryLocalVariable")
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
             return minus;
         } else {
@@ -960,6 +976,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private Duration getTimeSinceLastCommit() {
+//        if (lastCommitCheckTime == null)
+//            return Optional.empty();
+//
+//        Instant now = clock.getNow();
+//        return Optional.of(Duration.between(lastCommitCheckTime, now));
+
         Instant now = clock.getNow();
         return Duration.between(lastCommitCheckTime, now);
     }
@@ -978,19 +1000,18 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
 
-
     /**
      * Run the supplied function.
      */
     protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
-                                                                                           Consumer<R> callback,
-                                                                                           List<WorkContainer<K, V>> workContainerBatch) {
+                                                                                        Consumer<R> callback,
+                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
         // call the user's function
         List<R> resultsFromUserFunction;
         try {
             if (log.isDebugEnabled()) {
-                // toString can be heavy, especially for large batch sizes
-                MDC.put("offset", workContainerBatch.toString());
+                // first offset of the batch
+                MDC.put("offset", workContainerBatch.get(0).offset() + "");
             }
             log.trace("Pool received: {}", workContainerBatch);
 
@@ -1019,6 +1040,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 log.trace("Running users call back...");
                 callback.accept(result);
             }
+
             // fail or succeed, either way we're done
             for (var kvWorkContainer : workContainerBatch) {
                 addToMailBoxOnUserFunctionSuccess(kvWorkContainer, resultsFromUserFunction);
@@ -1029,7 +1051,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } catch (Exception e) {
             // handle fail
             log.error("Exception caught in user function running stage, registering WC as failed, returning to mailbox", e);
-            for (var wc: workContainerBatch) {
+            for (var wc : workContainerBatch) {
                 wc.onUserFunctionFailure();
                 addToMailbox(wc); // always add on error
             }

@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.state;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.WallClock;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.AccessLevel;
@@ -28,6 +29,8 @@ import static io.confluent.csid.utils.KafkaUtils.toTopicPartition;
 public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     private final String DEFAULT_TYPE = "DEFAULT";
+
+    final static WallClock normalClock = new WallClock();
 
     /**
      * Assignment generation this record comes from. Used for fencing messages after partition loss, for work lingering
@@ -59,6 +62,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     /**
      * Wait this long before trying again
      */
+    // todo check it this dead code?
     private Duration retryDelay;
 
     /**
@@ -153,7 +157,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return inFlight;
     }
 
-    public void queueingForExecution() {
+    public void onQueueingForExecution() {
         log.trace("Queueing for execution: {}", this);
         inFlight = true;
         timeTakenAsWorkMs = Optional.of(System.currentTimeMillis());
@@ -199,5 +203,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
 
     public boolean hasPreviouslyFailed() {
         return getNumberOfFailedAttempts() > 0;
+    }
+
+    public boolean isAvailableToTakeAsWork() {
+        // missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
+        return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed(normalClock);
     }
 }

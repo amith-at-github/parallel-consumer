@@ -3,6 +3,8 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
+import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -17,7 +19,6 @@ import java.util.stream.Collectors;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.waitAtMost;
 
 /**
@@ -28,44 +29,81 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
     @Test
     void averageBatchSizeTest() {
-        int numRecs = 5000;
-        int batchSize = 5;
+        // test settings
+        int numRecs = 50000;
+        final int targetBatchSize = 20;
         int maxConcurrency = 8;
+        int processorDelayMs = 30;
+        int initialDynamicLoadFactor = targetBatchSize * 100;
+
+        //
         super.setupParallelConsumerInstance(ParallelConsumerOptions.builder()
-                .batchSize(batchSize)
+                .batchSize(targetBatchSize)
                 .ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED)
                 .maxConcurrency(maxConcurrency)
-                .processorDelayMs(30)
-                .initialDynamicLoadFactor(batchSize * 100)
+//                .processorDelayMs(processorDelayMs)
+//                .initialDynamicLoadFactor(initialDynamicLoadFactor)
                 .build());
+
+        //
+        parallelConsumer.setTimeBetweenCommits(ofSeconds(5));
+
+        //
         ktu.sendRecords(numRecs);
+
+        //
         var numBatches = new AtomicInteger(0);
         var numRecords = new AtomicInteger(0);
         long start = System.currentTimeMillis();
+        RateLimiter statusLogger = new RateLimiter(1);
+
         parallelConsumer.pollBatch(recordList -> {
-            numBatches.getAndIncrement();
-            numRecords.addAndGet(recordList.size());
+            int mytarget = targetBatchSize;
+            int size = recordList.size();
+
             try {
+//                log.info("Batch size {}", size);
                 Thread.sleep(30);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.error(e.getMessage(), e);
+            } finally {
+                numBatches.getAndIncrement();
+                numRecords.addAndGet(size);
             }
-            if (numRecords.get() % 100 == 0) {
-                log.info(
-                        "Processed {} records in {} batches with average size {}",
-                        numRecords.get(),
-                        numBatches.get(),
-                        numRecords.get() / (0.0 + numBatches.get())
-                );
-            }
+
+            statusLogger.performIfNotLimited(() -> {
+                try {
+                    log.info(
+                            "Processed {} records in {} batches with average size {}",
+                            numRecords.get(),
+                            numBatches.get(),
+                            calcAverage(numRecords, numBatches)
+                    );
+                } catch (Exception e) {
+                    log.error(e.getMessage(), e);
+                }
+            });
         });
+
+        //
         waitAtMost(ofSeconds(200)).alias("expected number of records")
                 .untilAsserted(() -> {
                     assertThat(numRecords.get()).isEqualTo(numRecs);
                 });
+
+        //
         var duration = System.currentTimeMillis() - start;
-        log.info("Processed {} records in {} ms. This is {} records per second. " , numRecs, duration, numRecs / (duration / 1000.0));
-        assertThat(numRecords.get() / (0.0 + numBatches.get())).isGreaterThan(batchSize * 0.9);
+        double averageBatchSize = calcAverage(numRecords, numBatches);
+        log.info("Processed {} records in {} ms. Average batch size was: {}. {} records per second.", numRecs, duration, averageBatchSize, numRecs / (duration / 1000.0));
+
+        //
+        double targetMetThreshold = 0.9;
+        double acceptableAttainedBatchSize = targetBatchSize * targetMetThreshold;
+        assertThat(averageBatchSize).isGreaterThan(acceptableAttainedBatchSize);
+    }
+
+    private double calcAverage(AtomicInteger numRecords, AtomicInteger numBatches) {
+        return numRecords.get() / (0.0 + numBatches.get());
     }
 
     @ParameterizedTest
