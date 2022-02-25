@@ -3,8 +3,8 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
-import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -13,9 +13,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import pl.tlinkowski.unij.api.UniLists;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -25,10 +23,11 @@ import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V>
         implements ParallelStreamProcessor<K, V> {
 
-    /**
-     * The number of messages to attempt pass into the {@link #pollBatch} user function
-     */
-    private int batchLevel = 5;
+// todo remove
+//    /**
+//     * The number of messages to attempt pass into the {@link #pollBatch} user function
+//     */
+//    private int batchLevel = 5;
 
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
