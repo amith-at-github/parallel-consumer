@@ -83,10 +83,16 @@ public interface VertxParallelStreamProcessor<K, V> extends ParallelConsumer<K, 
     void vertxFuture(final Function<ConsumerRecord<K, V>, Future<?>> result);
 
     /**
-     * Consumer from the Broker concurrently - use the various Vert.x systems to return us a vert.x Future based on this
-     * record, with a batch of records.
+     * Register a function to be applied to a batch of messages.
+     * <p>
+     * The system will treat the messages as a set, so if an error is thrown by the user code, then all messages will be
+     * marked as failed and be retried (Note that when they are retried, there is no guarantee they will all be in the
+     * same batch again). So if you're going to process messages individually, then don't use this function.
+     * <p>
+     * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
+     * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      *
-     * @see ParallelConsumerOptions#batchSize
+     * @see ParallelConsumerOptions#getBatchSize()
      */
     void batchVertxFuture(Function<List<ConsumerRecord<K, V>>, Future<?>> result);
 }
