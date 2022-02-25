@@ -843,7 +843,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
-        final Duration timeout = getTimeToNextCommitCheck(); // don't sleep longer than when we're expected to maybe commit
+//                final Duration timeout = getTimeToNextCommitCheck(); // don't sleep longer than when we're expected to maybe commit
+        final Duration timeout = getTimeBetweenCommits();
 
         // blocking get the head of the queue
         WorkContainer<K, V> firstBlockingPoll = null;
