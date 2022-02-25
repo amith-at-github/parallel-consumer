@@ -65,11 +65,20 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
     }
 
     /**
+     * Register a function to be applied to a batch of messages.
+     * <p>
      * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
+     * <p>
+     * The system will treat the messages as a set, so if an error is thrown by the user code, then all messages will be
+     * marked as failed and be retried (Note that when they are retried, there is no guarantee they will all be in the
+     * same batch again). So if you're going to process messages individually, then don't use this function.
+     * <p>
+     * Otherwise, if you're going to process messages in sub sets from this batch, it's better to instead adjust the
+     * {@link ParallelConsumerOptions#getBatchSize()} instead to the actual desired size, and process them as a whole.
      *
      * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
      *                        their work.
-     * @see ParallelConsumerOptions#batchSize
+     * @see ParallelConsumerOptions#getBatchSize()
      */
     public void reactBatch(Function<List<ConsumerRecord<K, V>>, Publisher<?>> reactorFunction) {
         Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recList) -> {
@@ -136,6 +145,13 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
+    /**
+     * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
+     *
+     * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
+     *                        their work.
+     * @see ParallelConsumerOptions#batchSize
+     */
     public void react(Function<ConsumerRecord<K, V>, Publisher<?>> reactorFunction) {
         // wrap single record function in batch function
         Function<List<ConsumerRecord<K, V>>, Publisher<?>> batchReactorFunctionWrapper = (recordList) -> {
