@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.Builder;
@@ -110,22 +111,19 @@ public class ParallelConsumerOptions<K, V> {
     }
 
     /**
-     * When using batching, the initialDynamicLoadFactor must be higher than without batching.
-     * It could be set to batchsize * 2, but it is exposed here for providing the user a configuration option.
-     * When it is not set, the defaultInitialLoadingFactor specified in
-     * {@link io.confluent.parallelconsumer.internal.DynamicLoadFactor} is used.
+     * When using batching, the initialDynamicLoadFactor must be higher than without batching. It could be set to
+     * batchsize * 2, but it is exposed here for providing the user a configuration option. When it is not set, the
+     * defaultInitialLoadingFactor specified in {@link io.confluent.parallelconsumer.internal.DynamicLoadFactor} is
+     * used.
      */
-
     private final Integer initialDynamicLoadFactor;
 
     /**
-     * When using batching, the received batch size often is considerably lower than the requested batch size.
-     * This may be a problem when a certain batch size is expected for communication with an external system
-     * (e.g. a Web Service that works best when sending 50 events per request).
-     * This parameter allows slowing down the processor thread, such that enough messages are received to closely
-     * fulfill the requested batch size.
+     * When using batching, the received batch size often is considerably lower than the requested batch size. This may
+     * be a problem when a certain batch size is expected for communication with an external system (e.g. a Web Service
+     * that works best when sending 50 events per request). This parameter allows slowing down the processor thread,
+     * such that enough messages are received to closely fulfill the requested batch size.
      */
-
     @Builder.Default
     public final Integer processorDelayMs = 0;
 
@@ -182,11 +180,11 @@ public class ParallelConsumerOptions<K, V> {
 
     /**
      * Controls how long to block while waiting for the {@link Producer#send} to complete for any ProducerRecords
-     * returned from the user-function. Only relevant if using one of the produce-flows and providing a
-     * {@link ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
-     *
-     * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary re-processing
-     * and duplicates on slow {@link Producer#send} calls.
+     * returned from the user-function. Only relevant if using one of the produce-flows and providing a {@link
+     * ParallelConsumerOptions#producer}. If the timeout occurs the record will be re-processed in the user-function.
+     * <p>
+     * Consider aligning the value with the {@link ParallelConsumerOptions#producer}-options to avoid unnecessary
+     * re-processing and duplicates on slow {@link Producer#send} calls.
      *
      * @see org.apache.kafka.clients.producer.ProducerConfig#DELIVERY_TIMEOUT_MS_CONFIG
      */
@@ -194,8 +192,8 @@ public class ParallelConsumerOptions<K, V> {
     private final Duration sendTimeout = Duration.ofSeconds(10);
 
     /**
-     * Controls how long to block while waiting for offsets to be committed.
-     * Only relevant if using {@link CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
+     * Controls how long to block while waiting for offsets to be committed. Only relevant if using {@link
+     * CommitMode#PERIODIC_CONSUMER_SYNC} commit-mode.
      */
     @Builder.Default
     private final Duration offsetCommitTimeout = Duration.ofSeconds(10);

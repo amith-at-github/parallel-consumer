@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -72,11 +73,10 @@ public class DynamicLoadFactor {
     private Instant lastStepTime = Instant.MIN;
 
     /**
-     * When using batching, the default initial dynamic load factor 2 is often too low.
-     * Therefore, this constructor allows to set an initial dynamic load factor via the options.
-     * It may make sense to set the initial dynamic load factor to 2 * batchsize.
+     * When using batching, the default initial dynamic load factor 2 is often too low. Therefore, this constructor
+     * allows to set an initial dynamic load factor via the options. It may make sense to set the initial dynamic load
+     * factor to 2 * batchsize.
      */
-
     public DynamicLoadFactor(ParallelConsumerOptions options) {
         this.currentFactor = options.getInitialDynamicLoadFactor() == null ?
                 DEFAULT_INITIAL_LOADING_FACTOR :
