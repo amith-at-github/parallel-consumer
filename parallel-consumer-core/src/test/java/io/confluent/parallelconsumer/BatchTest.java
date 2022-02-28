@@ -58,11 +58,10 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
         RateLimiter statusLogger = new RateLimiter(1);
 
         parallelConsumer.pollBatch(recordList -> {
-            int mytarget = targetBatchSize;
             int size = recordList.size();
 
             try {
-//                log.info("Batch size {}", size);
+                log.trace("Batch size {}", size);
                 Thread.sleep(30);
             } catch (InterruptedException e) {
                 log.error(e.getMessage(), e);
@@ -73,7 +72,7 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
             statusLogger.performIfNotLimited(() -> {
                 try {
-                    log.info(
+                    log.debug(
                             "Processed {} records in {} batches with average size {}",
                             numRecords.get(),
                             numBatches.get(),
@@ -94,7 +93,7 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
         //
         var duration = System.currentTimeMillis() - start;
         double averageBatchSize = calcAverage(numRecords, numBatches);
-        log.info("Processed {} records in {} ms. Average batch size was: {}. {} records per second.", numRecs, duration, averageBatchSize, numRecs / (duration / 1000.0));
+        log.debug("Processed {} records in {} ms. Average batch size was: {}. {} records per second.", numRecs, duration, averageBatchSize, numRecs / (duration / 1000.0));
 
         //
         double targetMetThreshold = 0.9;
@@ -120,7 +119,7 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
         //
         parallelConsumer.pollBatch(x -> {
-            log.info("Batch of messages: {}", toOffsets(x));
+            log.debug("Batch of messages: {}", toOffsets(x));
             received.add(x);
         });
 
