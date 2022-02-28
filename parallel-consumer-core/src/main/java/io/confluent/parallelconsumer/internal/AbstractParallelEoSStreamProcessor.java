@@ -399,7 +399,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (controlThreadFuture.isPresent()) {
             log.debug("Checking for control thread exception...");
             Future<?> future = controlThreadFuture.get();
-            future.get(toSeconds(timeout), SECONDS); // throws exception if supervisor saw one
+            future.get(timeout.toMillis(), MILLISECONDS); // throws exception if supervisor saw one
         }
 
         log.info("Close complete.");
@@ -696,7 +696,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 // perf: could inline makeBatches
                 var batches = makeBatches(workToProcess);
                 var sizes = batches.stream().map(List::size).sorted().collect(Collectors.toList());
-                log.info("num batches: {} smallest {} sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
+                log.debug("num batches: {} smallest {} sizes {}", batches.size(), sizes.stream().findFirst().get(), sizes);
                 for (var batch : batches) {
                     int target = (int) options.getBatchSize().get();
                     int size = batch.size();
@@ -880,9 +880,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } catch (InterruptedException e) {
             log.debug("Interrupted waiting on work results");
         }
+
         if (firstBlockingPoll == null) {
             log.debug("Mailbox results returned null, indicating timeout (which was set as {}) or interruption during a blocking wait for returned work results", timeout);
         } else {
+            log.debug("Mailbox results returned a result {}, either arriving during the poll or already there", firstBlockingPoll);
             results.add(firstBlockingPoll);
         }
 
@@ -1069,7 +1071,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     protected void addToMailbox(WorkContainer<K, V> wc) {
-        log.trace("Adding {} to mailbox...", wc);
+        log.debug("Adding {} to mailbox...", wc);
         workMailBox.add(wc);
     }
 

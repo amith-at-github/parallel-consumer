@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
@@ -35,7 +34,6 @@ import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
 import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
-import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -205,8 +203,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
         subscribeParallelConsumerAndMockConsumerTo(INPUT_TOPIC);
 
-        parentParallelConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
-        parentParallelConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
+        // todo shouldn't need if test harness is also properly event driven?
+//        parentParallelConsumer.setLongPollTimeout(ofMillis(DEFAULT_BROKER_POLL_FREQUENCY_MS));
+//        parentParallelConsumer.setTimeBetweenCommits(ofMillis(DEFAULT_COMMIT_INTERVAL_MAX_MS));
 
         verificationWaitDelay = parentParallelConsumer.getTimeBetweenCommits().multipliedBy(2).toMillis();
 

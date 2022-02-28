@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -22,7 +21,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.*;
 
-import static io.confluent.csid.utils.BackportUtils.toSeconds;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
 import static io.confluent.parallelconsumer.internal.State.closed;
 import static io.confluent.parallelconsumer.internal.State.running;
@@ -189,8 +187,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         Duration thisLongPollTimeout = state == running ? BrokerPollSystem.longPollTimeout
                 : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
-        log.debug("Long polling broker with timeout {} seconds, might appear to sleep here if subs are paused, or no data available on broker.", toSeconds(thisLongPollTimeout));
-        return consumerManager.poll(thisLongPollTimeout);
+        log.debug("Long polling broker with timeout {}, might appear to sleep here if subs are paused, or no data available on broker.", thisLongPollTimeout);
+        ConsumerRecords<K, V> poll = consumerManager.poll(thisLongPollTimeout);
+        log.debug("Poll completed");
+        return poll;
     }
 
     /**

@@ -30,11 +30,12 @@
     <logger name="io.confluent.parallelconsumer" level="info"/>
 
     <!-- Key classes -->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <!--    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="debug"/>-->
+    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>
+    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="debug"/>
 
 
+        <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="trace"/>
     <!--    <logger name="io.confluent.parallelconsumer.state.RemovedPartitionState" level="trace"/>-->
 
     <logger name="org.apache.kafka.common.config.AbstractConfig" level="error"/>
