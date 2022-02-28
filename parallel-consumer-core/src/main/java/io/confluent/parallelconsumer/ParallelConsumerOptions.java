@@ -157,7 +157,8 @@ public class ParallelConsumerOptions<K, V> {
      * congestion control theory #21.
      */
     @Builder.Default
-    private final int maxConcurrency = 16;
+    private final int maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+    public static final int DEFAULT_MAX_CONCURRENCY = 16;
 
     /**
      * When a message fails, how long the system should wait before trying that message again.

@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -53,7 +52,7 @@ public class ConsumerManager<K, V> {
             metaCache = consumer.groupMetadata();
             records = consumer.poll(timeoutToUse);
             metaCache = consumer.groupMetadata();
-            log.debug("Poll completed normally and returned {}...", records.count());
+            log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
         } catch (WakeupException w) {
             correctPollWakeups++;
             log.debug("Awoken from broker poll");

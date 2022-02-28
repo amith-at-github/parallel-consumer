@@ -7,47 +7,26 @@ import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
-import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
-import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.BaseStream;
 
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.PERIODIC_CONSUMER_SYNC;
 import static io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @Slf4j
-class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
+class ReactorPCTest extends ReactorUnitTestBase {
 
-    public static final int MAX_CONCURRENCY = 1000;
-    ReactorProcessor<String, String> rp;
-
-    @Override
-    protected AbstractParallelEoSStreamProcessor initAsyncConsumer(ParallelConsumerOptions parallelConsumerOptions) {
-        var build = parallelConsumerOptions.toBuilder()
-                .commitMode(PERIODIC_CONSUMER_SYNC)
-                .maxConcurrency(MAX_CONCURRENCY)
-//                .ordering(ParallelConsumerOptions.ProcessingOrder.KEY)
-                .build();
-
-        rp = new ReactorProcessor<>(build);
-
-        return rp;
-    }
+    protected static final int MAX_CONCURRENCY = 1000;
 
     @BeforeEach
     public void setupData() {
@@ -56,13 +35,15 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
 
     @Test
     void kickTires() {
+        initAsyncConsumer(ParallelConsumerOptions.builder().maxConcurrency(MAX_CONCURRENCY).build());
+
         primeFirstRecord();
         primeFirstRecord();
         primeFirstRecord();
 
         ConcurrentLinkedQueue<Object> msgs = new ConcurrentLinkedQueue<>();
 
-        rp.react((rec) -> {
+        reactorPC.react((rec) -> {
             log.info("Reactor user poll function: {}", rec);
             msgs.add(rec);
             Mono<String> result = Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()));
@@ -83,16 +64,11 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
                 });
     }
 
-    private static Flux<String> fromPath(Path path) {
-        return Flux.using(() -> Files.lines(path),
-                Flux::fromStream,
-                BaseStream::close
-        );
-    }
-
     @SneakyThrows
     @Test
     void concurrencyTest() {
+        initAsyncConsumer(ParallelConsumerOptions.builder().maxConcurrency(MAX_CONCURRENCY).build());
+
         //
         var quantity = 100_000;
         var consumerRecords = ktu.generateRecords(quantity - 1); // -1 coz already has 1 record primed (all tests do)
@@ -110,7 +86,7 @@ class ReactorPCTest extends ParallelEoSStreamProcessorTestBase {
         var completeOrProblem = new CountDownLatch(1);
         var maxConcurrency = MAX_CONCURRENCY;
 
-        rp.react((rec) -> {
+        reactorPC.react((rec) -> {
             Mono<String> result = Mono.just(StringUtils.msg("result: {}:{}", rec.offset(), rec.value()))
                     .doOnNext(ignore -> {
                         // add that our mono processing has started
