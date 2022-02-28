@@ -78,7 +78,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         try {
             executorService = InitialContext.doLookup(managedExecutorService);
         } catch (NamingException e) {
-            log.debug("Using Java SE Thread",e);
+            log.debug("Couldn't look up an execution service, falling back to Java SE Thread", e);
             executorService = Executors.newSingleThreadExecutor();
         }
         Future<Boolean> submit = executorService.submit(this::controlLoop);

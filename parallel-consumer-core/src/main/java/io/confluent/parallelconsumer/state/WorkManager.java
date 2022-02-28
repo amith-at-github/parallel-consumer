@@ -447,7 +447,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @return Work count in mailbox plus work added to the processing shards
      */
-    public long getTotalWorkWaitingProcessing() {
+    public long getTotalWorkAwaitingProcessing() {
         long workQueuedInShardsCount = sm.getWorkQueuedInShardsCountAwaitingSelection();
         Integer workQueuedInMailboxCount = getWorkQueuedInMailboxCount();
         return workQueuedInShardsCount + workQueuedInMailboxCount;
