@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -96,12 +97,12 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         primeFirstRecord();
         sendSecondRecord(consumerSpy);
 
+        // sanity
         assertThat(parallelConsumer.getWm().getOptions().getOrdering()).isEqualTo(UNORDERED);
 
+        // setup
         var locks = constructLatches(2);
-
         var processedStates = new LinkedHashMap<Integer, Boolean>();
-
         var startBarrierLatch = new CountDownLatch(1);
 
         // finish processing only msg 1
@@ -112,10 +113,11 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
             processedStates.put(offset, true);
         });
 
+        //
         awaitLatch(startBarrierLatch);
 
-        assertThat(parallelConsumer.getWm().getTotalWorkWaitingProcessing()).isEqualTo(2);
-
+        // zero records waiting, 2 out for processing
+        assertThat(parallelConsumer.getWm().getTotalWorkAwaitingProcessing()).isZero();
         assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1

@@ -651,7 +651,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getTotalWorkWaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getTotalWorkAwaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     private <R> int handleWork(final Function<List<ConsumerRecord<K, V>>, List<R>> userFunction, final Consumer<R> callback) {
