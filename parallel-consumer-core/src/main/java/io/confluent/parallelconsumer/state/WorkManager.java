@@ -157,7 +157,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @param requestedMaxWorkToRetrieve try to move at least this many messages into the inbound queues
      * @return the number of extra records ingested due to request
      */
-    private int ingestPolledRecordsIntoQueues(final int requestedMaxWorkToRetrieve) {
+    private int ingestPolledRecordsIntoQueues(long requestedMaxWorkToRetrieve) {
         log.debug("Will attempt to register the requested {} - {} available in internal mailbox",
                 requestedMaxWorkToRetrieve, wmbm.internalFlattenedMailQueueSize());
 
@@ -327,15 +327,15 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // todo rename - shunt messages from internal buffer into queues
     private int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
-        int available = sm.getWorkQueuedInShardsCount();
-        int extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
+        long available = sm.getWorkQueuedInShardsCountAwaitingSelection();
+        long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
         log.debug("Requested: {}, available in shards: {}, will try to process from mailbox the delta of: {}",
                 requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
 
         int ingested = ingestPolledRecordsIntoQueues(extraNeededFromInboxToSatisfy);
         log.debug("Ingested an extra {} records", ingested);
 
-        int ingestionOffBy = extraNeededFromInboxToSatisfy - ingested;
+        long ingestionOffBy = extraNeededFromInboxToSatisfy - ingested;
 
         return ingested;
     }
@@ -447,8 +447,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @return Work count in mailbox plus work added to the processing shards
      */
-    public int getTotalWorkWaitingProcessing() {
-        int workQueuedInShardsCount = sm.getWorkQueuedInShardsCount();
+    public long getTotalWorkWaitingProcessing() {
+        long workQueuedInShardsCount = sm.getWorkQueuedInShardsCountAwaitingSelection();
         Integer workQueuedInMailboxCount = getWorkQueuedInMailboxCount();
         return workQueuedInShardsCount + workQueuedInMailboxCount;
     }
@@ -462,7 +462,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        int partitionWorkRemainingCount = sm.getWorkQueuedInShardsCount();
+        long partitionWorkRemainingCount = sm.getWorkQueuedInShardsCountAwaitingSelection();
         boolean internalQueuesNotEmpty = hasWorkInMailboxes();
         return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
     }

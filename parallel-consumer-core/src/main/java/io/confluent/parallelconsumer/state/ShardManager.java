@@ -22,7 +22,6 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
-import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 
 /**
@@ -86,7 +85,7 @@ public class ShardManager<K, V> {
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
-    public int getWorkQueuedInShardsCount() {
+    public long getWorkQueuedInShardsCountAwaitingSelection() {
         long count = this.processingShards.values().parallelStream()
                 .flatMap(x -> x.values().stream())
                 // missing pm.isBlocked(topicPartition) ?
@@ -94,11 +93,7 @@ public class ShardManager<K, V> {
                 .count();
 //                .mapToInt(Map::size)
 //                .sum();
-        // todo ew refactor to use longs
-        if (count > Integer.MAX_VALUE) {
-            throw new IllegalStateException(msg("Bug: too many messages to count {} - bigger than Integer", count));
-        }
-        return (int) count;
+        return count;
     }
 
     public boolean workIsWaitingToBeProcessed() {

@@ -155,7 +155,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     }
 
     /**
-     * {@link #offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode)} doesnt check the final offsets -
+     * {@link #offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode)} doesn't check the final offsets -
      * that's what this test does.
      *
      * @param commitMode
