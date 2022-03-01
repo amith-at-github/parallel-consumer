@@ -12,6 +12,7 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.eventbus.EventBus;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
@@ -51,19 +52,21 @@ public class VertxBatchTest extends VertxBaseUnitTest {
             @Override
             protected Future<String> pollStep(List<ConsumerRecord<String, String>> recordList) {
 //                Context orCreateContext = vertx.getOrCreateContext();
-//                return vertx.executeBlocking(event -> {
-//                    try {
-//                        Thread.sleep(30);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
-//                    log.debug(msg);
-//                    event.complete(msg);
-//                });
+                vertx.executeBlocking(event -> {
+                    try {
+                        Thread.sleep(30);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
+                    log.debug(msg);
+                    event.complete(msg);
+                });
 //                DnsClient dnsClient = vertx.createDnsClient();
                 Context vc = vertx.getOrCreateContext();
 
+                EventBus bus = vertx.eventBus();
+                bus.request(recordList, null, )
 
                 Promise<String> promise = Promise.promise();
 
