@@ -137,7 +137,12 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * If the system failed with an exception, it is referenced here.
      */
-    private Exception failureReason;
+    protected Exception failureReason;
+
+    /**
+     * todo
+     */
+    protected Function<List<ConsumerRecord<K, V>>, List<?>> userFunction;
 
     public boolean isClosedOrFailed() {
         boolean closed = state == State.closed;
@@ -544,8 +549,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @see #supervisorLoop(Function, Consumer)
      */
-    protected <R> void supervisorLoop(Function<List<ConsumerRecord<K, V>>, List<R>> userFunction,
-                                      Consumer<R> callback) {
+    protected void supervisorLoop(Function<List<ConsumerRecord<K, V>>, List<?>> userFunction,
+                                  Consumer<?> callback) {
         if (state != State.unused) {
             throw new IllegalStateException(msg("Invalid state - the consumer cannot be used more than once (current " +
                     "state is {})", state));
@@ -564,6 +569,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             executorService = Executors.newSingleThreadExecutor();
         }
 
+        this.userFunction = userFunction;
 
         // run main pool loop in thread
         Callable<Boolean> controlTask = () -> {
@@ -575,7 +581,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             while (state != closed) {
                 try {
                     controlLoop(userFunction, callback);
-                } catch (Exception e) {
+                    if (failureReason != null) {
+                        throw failureReason;
+                    }
+                } catch (Throwable e) {
                     log.error("Error from poll control thread, will attempt controlled shutdown, then rethrow. Error: " + e.getMessage(), e);
                     doClose(DrainingCloseable.DEFAULT_TIMEOUT); // attempt to close
                     failureReason = new RuntimeException("Error from poll control thread: " + e.getMessage(), e);
@@ -592,15 +601,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Useful when testing with more than one instance
      */
-    private void addInstanceMDC() {
+    protected void addInstanceMDC() {
         this.myId.ifPresent(id -> MDC.put(MDC_INSTANCE_ID, id));
     }
 
     /**
      * Main control loop
      */
-    private <R> void controlLoop(Function<List<ConsumerRecord<K, V>>, List<R>> userFunction,
-                                 Consumer<R> callback) throws TimeoutException, ExecutionException, InterruptedException {
+    private void controlLoop(Function<List<ConsumerRecord<K, V>>, List<?>> userFunction,
+                             Consumer<?> callback) throws TimeoutException, ExecutionException, InterruptedException {
 
         //
         int newWork = handleWork(userFunction, callback);
@@ -654,7 +663,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 wm.getTotalWorkAwaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
-    private <R> int handleWork(final Function<List<ConsumerRecord<K, V>>, List<R>> userFunction, final Consumer<R> callback) {
+    private int handleWork(final Function<List<ConsumerRecord<K, V>>, List<?>> userFunction, final Consumer<?> callback) {
         // check queue pressure first before addressing it
         checkPressure();
 
@@ -687,9 +696,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @param workToProcess the polled records to process
      */
-    protected <R> void submitWorkToPool(Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
-                                        Consumer<R> callback,
-                                        List<WorkContainer<K, V>> workToProcess) {
+    protected void submitWorkToPool(Function<List<ConsumerRecord<K, V>>, List<?>> usersFunction,
+                                    Consumer<?> callback,
+                                    List<WorkContainer<K, V>> workToProcess) {
         if (!workToProcess.isEmpty()) {
             log.debug("New work incoming: {}, Pool stats: {}", workToProcess.size(), workerThreadPool);
             if (options.getBatchSize().isPresent()) {
@@ -710,13 +719,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private <R> void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction, final Consumer<R> callback, final List<WorkContainer<K, V>> batch) {
+    /**
+     * Implementors must call {@link #setWorkersFuture(List, Future)}
+     */
+    protected void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<?>> usersFunction,
+                                         final Consumer<?> callback,
+                                         final List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
         log.trace("Sending work ({}) to pool", batch);
-        Future outputRecordFuture = workerThreadPool.submit(() -> {
+        Future<Object> outputRecordFuture = workerThreadPool.submit(() -> {
             addInstanceMDC();
-            return runUserFunction(usersFunction, callback, batch);
+            // todo cast
+            return runUserFunction(usersFunction, (Consumer<Object>) callback, batch);
         });
+        setWorkersFuture(batch, outputRecordFuture);
+    }
+
+    protected void setWorkersFuture(List<WorkContainer<K, V>> batch, Future outputRecordFuture) {
         // for a batch, each message in the batch shares the same result
         for (final WorkContainer<K, V> workContainer : batch) {
             workContainer.setFuture(outputRecordFuture);
@@ -1005,11 +1024,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * Run the supplied function.
      */
-    protected <R> List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, R>> runUserFunction(Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
-                                                                                        Consumer<R> callback,
-                                                                                        List<WorkContainer<K, V>> workContainerBatch) {
+    protected List<ParallelConsumer.Tuple<ConsumerRecord<K, V>, ?>> runUserFunction(Function<List<ConsumerRecord<K, V>>, List<?>> usersFunction,
+                                                                                    Consumer<Object> callback,
+                                                                                    List<WorkContainer<K, V>> workContainerBatch) {
         // call the user's function
-        List<R> resultsFromUserFunction;
+        List<?> resultsFromUserFunction;
         try {
             if (log.isDebugEnabled()) {
                 // first offset of the batch
@@ -1037,8 +1056,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
 
             // capture each result, against the input record
-            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, R>>();
-            for (R result : resultsFromUserFunction) {
+            var intermediateResults = new ArrayList<Tuple<ConsumerRecord<K, V>, ?>>();
+            for (Object result : resultsFromUserFunction) {
                 log.trace("Running users call back...");
                 callback.accept(result);
             }

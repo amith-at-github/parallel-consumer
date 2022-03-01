@@ -16,6 +16,7 @@ import me.tongfei.progressbar.ProgressBar;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -70,6 +71,11 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         double targetMetThreshold = 0.9;
         double acceptableAttainedBatchSize = targetBatchSize * targetMetThreshold;
         assertThat(averageBatchSize).isGreaterThan(acceptableAttainedBatchSize);
+        assertThat(getPC().isClosedOrFailed()).isFalse();
+
+        LongPollingMockConsumerSubject.assertThat(getKtu().getConsumerSpy())
+                .hasCommittedToAnyPartition()
+                .atLeastOffset(numRecsExpected);
     }
 
     protected abstract KafkaTestUtils getKtu();
@@ -137,6 +143,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
                     assertThat(received).hasSize(expectedNumOfBatches);
+                    assertThat(received.stream().mapToLong(Collection::size).sum()).isEqualTo(numRecsExpected);
                 });
 
         assertThat(received)

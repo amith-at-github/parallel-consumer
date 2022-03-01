@@ -80,7 +80,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
      * @see ParallelConsumerOptions#getBatchSize()
      */
     public void reactBatch(Function<List<ConsumerRecord<K, V>>, Publisher<?>> reactorFunction) {
-        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recList) -> {
+        Function<List<ConsumerRecord<K, V>>, List<?>> wrappedUserFunc = (recList) -> {
 
             if (log.isTraceEnabled()) {
                 log.trace("Record list ({}), executing void function...",

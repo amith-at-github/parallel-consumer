@@ -135,12 +135,15 @@ public class VertxBatchTest extends VertxBaseUnitTest {
             @Override
             public void batchPoll(List<List<ConsumerRecord<String, String>>> received) {
                 vertxAsync.batchVertxFuture(recordList -> {
-                    return vertx.executeBlocking(event -> {
-                        log.debug("Saw batch or records: {}", toOffsets(recordList));
-                        received.add(recordList);
-
-                        event.complete(msg("Saw batch or records: {}", toOffsets(recordList)));
-                    });
+//                    return vertx.executeBlocking(event -> {
+                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
+                    log.debug(msg);
+                    received.add(recordList);
+//                    return Future.succeededFuture(msg);
+                    return Future.failedFuture(new RuntimeException("testing failure"));
+//                        event.complete();
+//
+//                    });
                 });
             }
         };
@@ -150,7 +153,8 @@ public class VertxBatchTest extends VertxBaseUnitTest {
     void averageBatchSizeTest(Vertx vertx, VertxTestContext tc) {
         this.vertx = vertx;
         this.tc = tc;
-        batchTestMethods.averageBatchSizeTestMethod(10000);
+        int numRecsExpected = 10000;
+        batchTestMethods.averageBatchSizeTestMethod(numRecsExpected);
         tc.completeNow();
     }
 

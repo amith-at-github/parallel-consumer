@@ -46,6 +46,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     @Setter
     private String workType;
 
+    @Setter
+    @Getter
+    private Object extensionPayload;
+
     @Getter
     private final ConsumerRecord<K, V> cr;
 

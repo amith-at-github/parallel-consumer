@@ -44,7 +44,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     public void poll(Consumer<ConsumerRecord<K, V>> usersVoidConsumptionFunction) {
         validateNonBatch();
 
-        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
+        Function<List<ConsumerRecord<K, V>>, List<?>> wrappedUserFunc = (recordList) -> {
             if (recordList.size() != 1) {
                 throw new IllegalArgumentException("Bug: Function only takes a single element");
             }
@@ -80,7 +80,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         }
 
         // wrap user func to add produce function
-        Function<List<ConsumerRecord<K, V>>, List<ConsumeProduceResult<K, V, K, V>>> wrappedUserFunc = (consumedRecordList) -> {
+        Function<List<ConsumerRecord<K, V>>, List<?>> wrappedUserFunc = (consumedRecordList) -> {
             var consumedRecord = consumedRecordList.get(0); // will always only have one
             List<ProducerRecord<K, V>> recordListToProduce = carefullyRun(userFunction, consumedRecord);
 
@@ -132,7 +132,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
     public void pollBatch(Consumer<List<ConsumerRecord<K, V>>> usersVoidConsumptionFunction) {
         validateBatch();
 
-        Function<List<ConsumerRecord<K, V>>, List<Object>> wrappedUserFunc = (recordList) -> {
+        Function<List<ConsumerRecord<K, V>>, List<?>> wrappedUserFunc = (recordList) -> {
             log.trace("asyncPoll - Consumed set of records ({}), executing void function...", recordList.size());
             usersVoidConsumptionFunction.accept(recordList);
             return UniLists.of(); // user function returns no produce records, so we satisfy our api
