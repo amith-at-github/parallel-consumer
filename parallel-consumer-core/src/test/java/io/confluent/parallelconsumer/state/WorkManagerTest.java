@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.state;
  */
 import io.confluent.csid.utils.AdvancingWallClockProvider;
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -476,7 +477,7 @@ class WorkManagerTest {
         var build = ParallelConsumerOptions.builder().ordering(KEY).build();
         setupWorkManager(build);
 
-        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         List<Integer> keys = range(uniqueKeys).list();
 
@@ -500,7 +501,7 @@ class WorkManagerTest {
 
     @Test
     void treeMapOrderingCorrect() {
-        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new MockConsumer<>(OffsetResetStrategy.EARLIEST));
+        KafkaTestUtils ktu = new KafkaTestUtils(INPUT_TOPIC, null, new LongPollingMockConsumer<>(OffsetResetStrategy.EARLIEST));
 
         int i = 10;
         var records = ktu.generateRecords(i);

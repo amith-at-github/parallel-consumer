@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -68,6 +69,11 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
                 //
                 parallelConsumer.setTimeBetweenCommits(ofSeconds(5));
+            }
+
+            @Override
+            protected AbstractParallelEoSStreamProcessor getPC() {
+                return parallelConsumer;
             }
 
             @Override

@@ -6,8 +6,11 @@ package io.confluent.parallelconsumer;
 
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
+import io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -112,13 +115,14 @@ public abstract class BatchTestMethods<POLL_RETURN> {
     protected abstract void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering);
 
     //todo rename
+    @SneakyThrows
     public void batchTestMethod(ParallelConsumerOptions.ProcessingOrder order) {
         int batchSize = 2;
-        int numRecs = 5;
+        int numRecsExpected = 5;
 
         setupParallelConsumer(batchSize, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
 
-        var recs = getKtu().sendRecords(numRecs);
+        var recs = getKtu().sendRecords(numRecsExpected);
         List<List<ConsumerRecord<String, String>>> received = new ArrayList<>();
 
         //
@@ -126,10 +130,11 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
         //
         int expectedNumOfBatches = (order == PARTITION) ?
-                numRecs : // partition ordering restricts the batch sizes to a single element as all records are in a single partition
-                (int) Math.ceil(numRecs / (double) batchSize);
+                numRecsExpected : // partition ordering restricts the batch sizes to a single element as all records are in a single partition
+                (int) Math.ceil(numRecsExpected / (double) batchSize);
 
         waitAtMost(ofSeconds(5)).alias("expected number of batches")
+                .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
                     assertThat(received).hasSize(expectedNumOfBatches);
                 });
@@ -139,7 +144,17 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .allSatisfy(x -> assertThat(x).hasSizeLessThanOrEqualTo(batchSize))
                 .as("all messages processed")
                 .flatExtracting(x -> x).hasSameElementsAs(recs);
+        assertThat(getPC().isClosedOrFailed()).isFalse();
+
+        Thread.sleep(10000);
+
+        // todo fix assertion of actual committed offsets
+        LongPollingMockConsumerSubject.assertThat(getKtu().getConsumerSpy())
+                .hasCommittedToAnyPartition()
+                .atLeastOffset(numRecsExpected);
     }
+
+    protected abstract AbstractParallelEoSStreamProcessor getPC();
 
     //todo rename
     public abstract void batchPoll(List<List<ConsumerRecord<String, String>>> received);

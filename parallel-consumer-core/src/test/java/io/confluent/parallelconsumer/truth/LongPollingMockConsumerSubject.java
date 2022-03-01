@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.truth;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
 import io.confluent.csid.utils.LongPollingMockConsumer;
@@ -49,5 +50,14 @@ public class LongPollingMockConsumerSubject<K, V> extends Subject {
         return check("getCommitHistory(%s)", tp).about(commitHistories()).that(commitHistory);
     }
 
+    public CommitHistorySubject hasCommittedToAnyPartition() {
+        isNotNull();
+        CopyOnWriteArrayList<Map<TopicPartition, OffsetAndMetadata>> allCommits = actual.getCommitHistoryInt();
+        List<OffsetAndMetadata> historyForCommitsToPartition = allCommits.stream()
+                .flatMap(aCommitInstance -> aCommitInstance.values().stream())
+                .collect(Collectors.toList());
+        CommitHistory commitHistory = new CommitHistory(historyForCommitsToPartition);
+        return check("getCommitHistory()").about(commitHistories()).that(commitHistory);
+    }
 
 }
