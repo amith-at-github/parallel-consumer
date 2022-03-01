@@ -7,12 +7,11 @@ package io.confluent.parallelconsumer.vertx;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.BatchTestMethods;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
-import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.eventbus.EventBus;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import lombok.SneakyThrows;
@@ -51,26 +50,26 @@ public class VertxBatchTest extends VertxBaseUnitTest {
             @SneakyThrows
             @Override
             protected Future<String> pollStep(List<ConsumerRecord<String, String>> recordList) {
-//                Context orCreateContext = vertx.getOrCreateContext();
-                vertx.executeBlocking(event -> {
-                    try {
-                        Thread.sleep(30);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
-                    log.debug(msg);
-                    event.complete(msg);
-                });
+                int delayInMs = 30;
+                //                Context orCreateContext = vertx.getOrCreateContext();
+//                vertx.executeBlocking(event -> {
+//                    try {
+//                        Thread.sleep(delayInMs);
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
+//                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
+//                    log.debug(msg);
+//                    event.complete(msg);
+//                });
 //                DnsClient dnsClient = vertx.createDnsClient();
-                Context vc = vertx.getOrCreateContext();
+//                Context vc = vertx.getOrCreateContext();
 
-                EventBus bus = vertx.eventBus();
-                bus.request(recordList, null, )
+//                EventBus bus = vertx.eventBus();
+//                bus.request(recordList, null, )
 
                 Promise<String> promise = Promise.promise();
 
-                int delayInMs = 30;
                 vertx.setTimer(delayInMs, event -> {
                     String msg = msg("Saw batch or records: {}", toOffsets(recordList));
                     log.debug(msg);
@@ -126,6 +125,11 @@ public class VertxBatchTest extends VertxBaseUnitTest {
                 vertxAsync.setTimeBetweenCommits(ofSeconds(5));
 
                 setupParallelConsumerInstance(options);
+            }
+
+            @Override
+            protected AbstractParallelEoSStreamProcessor getPC() {
+                return vertxAsync;
             }
 
             @Override

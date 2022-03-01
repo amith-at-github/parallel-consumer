@@ -34,7 +34,8 @@ public class KafkaTestUtils {
     private final String INPUT_TOPIC;
     private final String CONSUMER_GROUP_ID;
 
-    private final MockConsumer consumerSpy;
+    @Getter
+    private final LongPollingMockConsumer consumerSpy;
 
     int offset = 0;
 

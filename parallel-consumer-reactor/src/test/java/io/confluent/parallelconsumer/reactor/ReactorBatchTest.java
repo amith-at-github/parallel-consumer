@@ -7,6 +7,7 @@ package io.confluent.parallelconsumer.reactor;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.parallelconsumer.BatchTestMethods;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +66,11 @@ public class ReactorBatchTest extends ReactorUnitTestBase {
                 reactorPC.setTimeBetweenCommits(Duration.ofSeconds(5));
 
                 setupParallelConsumerInstance(options);
+            }
+
+            @Override
+            protected AbstractParallelEoSStreamProcessor getPC() {
+                return reactorPC;
             }
 
             @Override
