@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.confluent.csid.utils.StringUtils.msg;
-import static java.time.Duration.ofSeconds;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
@@ -40,7 +39,7 @@ public class VertxBatchTest extends VertxBaseUnitTest {
 
     @BeforeEach
     void setup() {
-        batchTestMethods = new BatchTestMethods<>() {
+        batchTestMethods = new BatchTestMethods<>(this) {
 
             @Override
             protected KafkaTestUtils getKtu() {
@@ -51,22 +50,6 @@ public class VertxBatchTest extends VertxBaseUnitTest {
             @Override
             protected Future<String> pollStep(List<ConsumerRecord<String, String>> recordList) {
                 int delayInMs = 30;
-                //                Context orCreateContext = vertx.getOrCreateContext();
-//                vertx.executeBlocking(event -> {
-//                    try {
-//                        Thread.sleep(delayInMs);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
-//                    log.debug(msg);
-//                    event.complete(msg);
-//                });
-//                DnsClient dnsClient = vertx.createDnsClient();
-//                Context vc = vertx.getOrCreateContext();
-
-//                EventBus bus = vertx.eventBus();
-//                bus.request(recordList, null, )
 
                 Promise<String> promise = Promise.promise();
 
@@ -76,31 +59,7 @@ public class VertxBatchTest extends VertxBaseUnitTest {
                     promise.complete(msg);
                 });
 
-//                vc.runOnContext(event -> {
-//                    try {
-//                        Thread.sleep(30); // it's ok to block vertx in testing for a teeny tiny bit - vertx doesn't have Reactor's delay functionality AFAICS
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
-//                    log.debug(msg);
-//                    promise.complete(msg);
-//                });
-
                 return promise.future();
-
-//                Future<String> lookup = dnsClient.lookup("");
-//                return Future.future(event -> {
-//                    try {
-//                        Thread.sleep(30); // it's ok to block vertx in testing for a teeny tiny bit - vertx doesn't have Reactor's delay functionality AFAICS
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                    String msg = msg("Saw batch or records: {}", toOffsets(recordList));
-//                    log.debug(msg);
-//                    event.complete(msg);
-//                });
-
             }
 
             @Override
@@ -108,23 +67,6 @@ public class VertxBatchTest extends VertxBaseUnitTest {
                 vertxAsync.batchVertxFuture(recordList -> {
                     return pollInner(numBatches, numRecords, statusLogger, recordList);
                 });
-            }
-
-            @Override
-            public void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
-                //
-                ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
-                        .batchSize(targetBatchSize)
-                        .ordering(ordering)
-                        .maxConcurrency(maxConcurrency)
-//                .processorDelayMs(processorDelayMs)
-//                .initialDynamicLoadFactor(initialDynamicLoadFactor)
-                        .build();
-
-                //
-                vertxAsync.setTimeBetweenCommits(ofSeconds(5));
-
-                setupParallelConsumerInstance(options);
             }
 
             @Override

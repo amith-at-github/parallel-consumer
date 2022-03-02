@@ -50,9 +50,10 @@ public class ConsumerManager<K, V> {
             }
             pollingBroker.set(true);
             metaCache = consumer.groupMetadata();
+            log.debug("Poll starting with timeout: {}", timeoutToUse);
             records = consumer.poll(timeoutToUse);
-            metaCache = consumer.groupMetadata();
             log.debug("Poll completed normally (after timeout of {}) and returned {}...", timeoutToUse, records.count());
+            metaCache = consumer.groupMetadata();
         } catch (WakeupException w) {
             correctPollWakeups++;
             log.debug("Awoken from broker poll");

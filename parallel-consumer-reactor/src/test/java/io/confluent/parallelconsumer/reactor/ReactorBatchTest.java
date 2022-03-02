@@ -31,7 +31,7 @@ public class ReactorBatchTest extends ReactorUnitTestBase {
 
     @BeforeEach
     void setup() {
-        batchTestMethods = new BatchTestMethods<>() {
+        batchTestMethods = new BatchTestMethods<>(this) {
 
             @Override
             protected KafkaTestUtils getKtu() {
@@ -50,22 +50,6 @@ public class ReactorBatchTest extends ReactorUnitTestBase {
                 reactorPC.reactBatch(recordList -> {
                     return pollInner(numBatches, numRecords, statusLogger, recordList);
                 });
-            }
-
-            @Override
-            public void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
-                //
-                ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
-                        .batchSize(targetBatchSize)
-                        .ordering(ordering)
-                        .maxConcurrency(maxConcurrency)
-//                .processorDelayMs(processorDelayMs)
-//                .initialDynamicLoadFactor(initialDynamicLoadFactor)
-                        .build();
-
-                reactorPC.setTimeBetweenCommits(Duration.ofSeconds(5));
-
-                setupParallelConsumerInstance(options);
             }
 
             @Override

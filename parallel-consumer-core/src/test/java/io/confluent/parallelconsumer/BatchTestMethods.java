@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
@@ -29,6 +30,8 @@ import static org.awaitility.Awaitility.waitAtMost;
 @Slf4j
 @RequiredArgsConstructor
 public abstract class BatchTestMethods<POLL_RETURN> {
+
+    private final ParallelEoSStreamProcessorTestBase baseTest;
 
     //todo rename
     public void averageBatchSizeTestMethod(int numRecsExpected) {
@@ -54,7 +57,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         averageBatchSizePoll(numBatches, numRecordsProcessed, statusLogger);
 
         //
-        waitAtMost(ofSeconds(200)).alias("expected number of records")
+        waitAtMost(defaultTimeout).alias("expected number of records")
                 .untilAsserted(() -> {
                     bar.stepTo(numRecordsProcessed.get());
                     assertThat(numRecordsProcessed.get()).isEqualTo(numRecsExpected);
@@ -112,7 +115,18 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         return numRecords.get() / (0.0 + numBatches.get());
     }
 
-    protected abstract void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering);
+    protected void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
+        //
+        ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
+                .batchSize(targetBatchSize)
+                .ordering(ordering)
+                .maxConcurrency(maxConcurrency)
+                .build();
+        baseTest.setupParallelConsumerInstance(options);
+
+        //
+        baseTest.parentParallelConsumer.setTimeBetweenCommits(ofSeconds(5));
+    }
 
     //todo rename
     @SneakyThrows
@@ -133,7 +147,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 numRecsExpected : // partition ordering restricts the batch sizes to a single element as all records are in a single partition
                 (int) Math.ceil(numRecsExpected / (double) batchSize);
 
-        waitAtMost(ofSeconds(5)).alias("expected number of batches")
+        waitAtMost(defaultTimeout).alias("expected number of batches")
                 .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
                     assertThat(received).hasSize(expectedNumOfBatches);
@@ -145,8 +159,6 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .as("all messages processed")
                 .flatExtracting(x -> x).hasSameElementsAs(recs);
         assertThat(getPC().isClosedOrFailed()).isFalse();
-
-        Thread.sleep(10000);
 
         // todo fix assertion of actual committed offsets
         LongPollingMockConsumerSubject.assertThat(getKtu().getConsumerSpy())

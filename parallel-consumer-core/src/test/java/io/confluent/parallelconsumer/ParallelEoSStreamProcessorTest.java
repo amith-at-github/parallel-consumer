@@ -37,7 +37,7 @@ import static io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode.*
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
 import static java.time.Duration.ofSeconds;
-import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,7 +45,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-@Timeout(value = 10, unit = SECONDS)
+@Timeout(value = 1, unit = MINUTES)
 @Slf4j
 public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -132,7 +132,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         releaseAndWait(locks, 0);
 
         parallelConsumer.requestCommitAsap();
-        waitForSomeLoopCycles(5);
 
         log.debug("Closing...");
         parallelConsumer.close();

@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
@@ -75,7 +76,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
-    public static int defaultTimeoutSeconds = 10;
+    public static int defaultTimeoutSeconds = 30;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
@@ -136,6 +137,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         // don't try to close if error'd (at least one test purposefully creates an error to tests error handling) - we
         // don't want to bubble up an error here that we expect from here.
         if (!parentParallelConsumer.isClosedOrFailed()) {
+            if (parentParallelConsumer.getFailureCause() != null) {
+                log.error("PC has error - test failed");
+            }
             log.debug("Test finished, closing pc...");
             parentParallelConsumer.close();
         } else {
@@ -277,11 +281,16 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      */
     @SneakyThrows
     private void blockingLoopLatchTrigger(int waitForCount) {
-        log.debug("Waiting on {} cycles on loop latch...", waitForCount);
+        log.debug("Waiting on {} cycles on loop latch for {}...", waitForCount, defaultTimeout);
         loopLatchV = new CountDownLatch(waitForCount);
-        boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
-        if (timeout)
-            throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeoutSeconds, waitForCount, loopLatchV.getCount()));
+        try {
+            boolean timeout = !loopLatchV.await(defaultTimeoutSeconds, SECONDS);
+            if (timeout)
+                throw new TimeoutException(msg("Timeout of {}, waiting for {} counts, on latch with {} left", defaultTimeout, waitForCount, loopLatchV.getCount()));
+        } catch (InterruptedException e) {
+            log.error("Interrupted while waiting for loop latch - timeout was {}", defaultTimeout);
+            throw e;
+        }
     }
 
     @SneakyThrows
@@ -302,7 +311,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
         var expectedOffsetMap = UniMaps.of(partitionNumber, expectedOffset);
         verify(producerSpy, timeout(defaultTimeoutMs).times(1)).sendOffsetsToTransaction(argThat(
-                (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
+                        (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
                 any(ConsumerGroupMetadata.class));
     }
 

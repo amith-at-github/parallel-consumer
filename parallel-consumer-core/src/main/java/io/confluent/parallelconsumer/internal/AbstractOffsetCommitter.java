@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +30,7 @@ public abstract class AbstractOffsetCommitter<K, V> implements OffsetCommitter {
         try {
             Map<TopicPartition, OffsetAndMetadata> offsetsToSend = wm.findCompletedEligibleOffsetsAndRemove();
             if (offsetsToSend.isEmpty()) {
-                log.trace("No offsets ready");
+                log.debug("No offsets ready");
             } else {
                 log.debug("Will commit offsets for {} partition(s): {}", offsetsToSend.size(), offsetsToSend);
                 ConsumerGroupMetadata groupMetadata = consumerMgr.groupMetadata();

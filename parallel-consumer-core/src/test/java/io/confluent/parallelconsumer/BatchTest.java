@@ -12,17 +12,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static java.time.Duration.ofSeconds;
+import static java.util.concurrent.TimeUnit.MINUTES;
 
 /**
  * Basic tests for batch processing functionality
  */
+@Timeout(value = 1, unit = MINUTES)
 @Slf4j
 public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
@@ -30,7 +32,7 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
     @BeforeEach
     void setup() {
-        batchTestMethods = new BatchTestMethods<>() {
+        batchTestMethods = new BatchTestMethods<>(this) {
 
             @Override
             protected KafkaTestUtils getKtu() {
@@ -54,21 +56,6 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
                 parallelConsumer.pollBatch(recordList -> {
                     pollInner(numBatches, numRecords, statusLogger, recordList);
                 });
-            }
-
-            @Override
-            protected void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
-                //
-                setupParallelConsumerInstance(ParallelConsumerOptions.builder()
-                        .batchSize(targetBatchSize)
-                        .ordering(ParallelConsumerOptions.ProcessingOrder.UNORDERED)
-                        .maxConcurrency(maxConcurrency)
-//                .processorDelayMs(processorDelayMs)
-//                .initialDynamicLoadFactor(initialDynamicLoadFactor)
-                        .build());
-
-                //
-                parallelConsumer.setTimeBetweenCommits(ofSeconds(5));
             }
 
             @Override
