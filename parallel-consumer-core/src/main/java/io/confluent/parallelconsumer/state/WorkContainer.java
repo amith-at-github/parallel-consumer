@@ -107,12 +107,16 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
             // if never failed, there is no artificial delay, so "delay" has always passed
             return true;
         }
-        Duration delay = getDelay(clock);
+        Duration delay = getDelayUntilRetryDue(clock);
         boolean negative = delay.isNegative() || delay.isZero();
         return negative;
     }
 
-    public Duration getDelay(WallClock clock) {
+    public Duration getDelayUntilRetryDue() {
+        return getDelayUntilRetryDue(normalClock);
+    }
+
+    public Duration getDelayUntilRetryDue(WallClock clock) {
         Instant now = clock.getNow();
         Temporal nextAttemptAt = tryAgainAt(clock);
         return Duration.between(now, nextAttemptAt);
@@ -124,8 +128,8 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
             Duration retryDelay = getRetryDelay();
             return failedAt.get().plus(retryDelay);
         } else {
-            // never failed, no try again delay
-            return Instant.MIN;
+            // never failed, so no try again delay
+            return Instant.now();
         }
     }
 

@@ -76,7 +76,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter
     private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY);
 
-    private Instant lastCommitCheckTime = Instant.now();
+    private Instant lastCommitAttemptTime = Instant.now();
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
@@ -853,13 +853,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private void processWorkCompleteMailBox() {
         log.trace("Processing mailbox (might block waiting for results)...");
         Set<WorkContainer<K, V>> results = new HashSet<>();
-//                final Duration timeout = getTimeToNextCommitCheck(); // don't sleep longer than when we're expected to maybe commit
-        final Duration timeout = getTimeBetweenCommits();
+
+        final Duration timeToBlockFor = getTimeToBlockFor();
 
         // if paused, we won't be doing any work
         boolean workAvailable = wm.hasWorkInMailboxes() && wm.isSystemIdle();
         boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running) && !workAvailable;
-        boolean shouldLongPoll = noWorkToDoAndStillRunning && !isShouldCommitNow();
+
+        // todo possible remove this check and just use the time calculation?
+        boolean shouldLongPoll = noWorkToDoAndStillRunning;
         if (noWorkToDoAndStillRunning && isShouldCommitNow()) {
             log.debug("Should long poll, however it's time to commit");
         }
@@ -867,17 +869,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (shouldLongPoll) {
             if (log.isDebugEnabled()) {
                 log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
-                        timeout, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
+                        timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
             }
             currentlyPollingWorkCompleteMailBox.getAndSet(true);
-            // wait for work, with a timeout for sanity
-            log.trace("Blocking poll {}", timeout);
+            // wait for work, with a timeToBlockFor for sanity
+            log.trace("Blocking poll {}", timeToBlockFor);
             try {
-                WorkContainer<K, V> firstBlockingPoll = workMailBox.poll(timeout.toMillis(), MILLISECONDS);
+                WorkContainer<K, V> firstBlockingPoll = workMailBox.poll(timeToBlockFor.toMillis(), MILLISECONDS);
                 if (firstBlockingPoll == null) {
-                    log.debug("Mailbox results returned null, indicating timeout (which was set as {})", timeout);
+                    log.debug("Mailbox results returned null, indicating timeToBlockFor (which was set as {})", timeToBlockFor);
                 } else {
-                    log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeout);
+                    log.debug("Work arrived in mailbox during blocking poll. (Timeout was set as {})", timeToBlockFor);
                     results.add(firstBlockingPoll);
                 }
             } catch (InterruptedException e) {
@@ -902,6 +904,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
+    /**
+     * @return either the duration until next commit, or next work retry
+     */
+    private Duration getTimeToBlockFor() {
+        Duration effectiveCommitAttemptDelay = wm.isDirty() ? getTimeToNextCommitCheck() : getTimeBetweenCommits();
+        var retryTime = wm.getLowestRetryTime();
+        boolean commitDelayIsLower = effectiveCommitAttemptDelay.compareTo(retryTime) < 0;
+        return commitDelayIsLower ? effectiveCommitAttemptDelay : retryTime;
+    }
 
     /**
      * Conditionally commit offsets to broker
@@ -917,30 +928,41 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //                log.warn("Pool queue too low ({}), may be because of back pressure from encoding offsets, so committing", getWorkerQueueSize());
 //            }
             commitOffsetsThatAreReady();
-        } else {
-            if (log.isDebugEnabled()) {
-                if (wm.hasCommittableOffsets()) {
-                    log.debug("Have offsets to commit, but not enough time elapsed ({}), waiting for at least {}...", getTimeSinceLastCommit(), timeBetweenCommits);
-                } else {
-                    log.trace("Could commit now, but no offsets committable");
-                }
-            }
         }
+//        else {
+//            if (log.isDebugEnabled()) {
+//                if (wm.hasCommittableOffsets()) {
+//                    log.debug("Have offsets to commit, but not enough time elapsed ({}), waiting for at least {}...", getTimeSinceLastCommitAttempt(), timeBetweenCommits);
+//                } else {
+//                    log.trace("Could commit now, but no offsets committable");
+//                }
+//            }
+//        }
     }
 
     private boolean isShouldCommitNow() {
-        Duration elapsedSinceLast = getTimeSinceLastCommit();
+        Duration elapsedSinceLast = getTimeSinceLastCommitAttempt();
+
         boolean commitFrequencyOK = elapsedSinceLast.compareTo(timeBetweenCommits) > 0;
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
-        boolean commitCommand = isCommandedToCommit();
-        boolean shouldCommitNow = commitFrequencyOK || !lingerBeneficial || commitCommand;
-        if (shouldCommitNow) {
-            log.debug("commitFrequencyOK {} || !lingerBeneficial {} || commitCommand {}",
-                    commitFrequencyOK,
-                    !lingerBeneficial,
-                    commitCommand
+        boolean isCommandedToCommit = isCommandedToCommit();
+
+        boolean isDirty = wm.isDirty();
+        boolean shouldDoANormalCommit = isDirty && commitFrequencyOK && !lingerBeneficial;
+
+        boolean shouldCommitNow = shouldDoANormalCommit || isCommandedToCommit;
+
+        if (log.isDebugEnabled()) {
+            log.debug("Should commit this cycle? " +
+                    "shouldCommitNow? " + shouldCommitNow + " : " +
+                    "isDirty()? " + isDirty + ", " +
+                    "shouldDoANormalCommit? " + shouldDoANormalCommit + ", " +
+                    "commitFrequencyOK? " + commitFrequencyOK + ", " +
+                    "lingerBeneficial? " + lingerBeneficial + ", " +
+                    "isCommandedToCommit? " + isCommandedToCommit
             );
         }
+
         return shouldCommitNow;
     }
 
@@ -969,11 +991,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
         if (state == running || state == draining) {
-            Duration timeSinceLastCommit = getTimeSinceLastCommit();
-            //noinspection SimplifyOptionalCallChains
-//            if (!timeSinceLastCommit.isPresent()) {
-//                return getTimeBetweenCommits();
-//            }
+            Duration timeSinceLastCommit = getTimeSinceLastCommitAttempt();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
@@ -984,31 +1002,24 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private Duration getTimeSinceLastCommit() {
-//        if (lastCommitCheckTime == null)
-//            return Optional.empty();
-//
-//        Instant now = clock.getNow();
-//        return Optional.of(Duration.between(lastCommitCheckTime, now));
-
+    private Duration getTimeSinceLastCommitAttempt() {
         Instant now = clock.getNow();
-        return Duration.between(lastCommitCheckTime, now);
+        return Duration.between(lastCommitAttemptTime, now);
     }
 
     private void commitOffsetsThatAreReady() {
         if (wm.isClean()) {
             log.debug("Nothing changed since last commit, skipping");
-            return;
+        } else {
+            log.debug("Committing offsets that are ready...");
+            committer.retrieveOffsetsAndCommit();
         }
-        log.debug("Committing offsets that are ready...");
-        committer.retrieveOffsetsAndCommit();
-        updateLastCommitCheckTime();
+        updateLastCommitAttemptTime();
     }
 
-    private void updateLastCommitCheckTime() {
-        lastCommitCheckTime = Instant.now();
+    private void updateLastCommitAttemptTime() {
+        lastCommitAttemptTime = Instant.now();
     }
-
 
     /**
      * Run the supplied function.
@@ -1079,7 +1090,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     protected void addToMailbox(WorkContainer<K, V> wc) {
-        log.debug("Adding {} to mailbox...", wc);
+        String state = wc.isUserFunctionSucceeded() ? "succeeded" : "FAILED";
+        log.debug("Adding {} {} to mailbox...", state, wc);
         workMailBox.add(wc);
     }
 

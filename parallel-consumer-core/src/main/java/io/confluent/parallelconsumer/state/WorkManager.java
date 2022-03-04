@@ -363,6 +363,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
         pm.onOffsetCommitSuccess(offsetsToSend);
+        setClean();
     }
 
     public void onFailure(WorkContainer<K, V> wc) {
@@ -440,8 +441,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return pm.isClean();
     }
 
-    private boolean isDirty() {
+    public boolean isDirty() {
         return pm.isDirty();
+    }
+
+    private void setClean() {
+        pm.setClean();
     }
 
     /**
@@ -495,9 +500,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return getNumberRecordsOutForProcessing() == 0;
     }
 
+    // todo replace raw ConsumerRecord with read only context object wrapper #216
     public WorkContainer<K, V> getWorkContainerFor(ConsumerRecord<K, V> rec) {
         ShardManager<K, V> shard = getSm();
         return shard.getWorkContainerForRecord(rec);
     }
 
+    public Duration getLowestRetryTime() {
+        return sm.getLowestRetryTime();
+    }
 }

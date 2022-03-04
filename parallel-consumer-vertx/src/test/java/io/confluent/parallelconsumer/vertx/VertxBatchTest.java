@@ -5,6 +5,7 @@ package io.confluent.parallelconsumer.vertx;
  */
 
 import io.confluent.csid.utils.KafkaTestUtils;
+import io.confluent.parallelconsumer.BatchTestBase;
 import io.confluent.parallelconsumer.BatchTestMethods;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
@@ -30,7 +31,7 @@ import static io.confluent.csid.utils.StringUtils.msg;
 
 @Slf4j
 @ExtendWith(VertxExtension.class)
-public class VertxBatchTest extends VertxBaseUnitTest {
+public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
 
     private Vertx vertx;
     private VertxTestContext tc;
@@ -48,7 +49,7 @@ public class VertxBatchTest extends VertxBaseUnitTest {
 
             @SneakyThrows
             @Override
-            protected Future<String> pollStep(List<ConsumerRecord<String, String>> recordList) {
+            protected Future<String> averageBatchSizeTestPollStep(List<ConsumerRecord<String, String>> recordList) {
                 int delayInMs = 30;
 
                 Promise<String> promise = Promise.promise();
@@ -63,9 +64,9 @@ public class VertxBatchTest extends VertxBaseUnitTest {
             }
 
             @Override
-            protected void averageBatchSizePoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger) {
+            protected void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger) {
                 vertxAsync.batchVertxFuture(recordList -> {
-                    return pollInner(numBatches, numRecords, statusLogger, recordList);
+                    return averageBatchSizeTestPollInner(numBatches, numRecords, statusLogger, recordList);
                 });
             }
 
@@ -75,7 +76,7 @@ public class VertxBatchTest extends VertxBaseUnitTest {
             }
 
             @Override
-            public void batchPoll(List<List<ConsumerRecord<String, String>>> received) {
+            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received) {
                 vertxAsync.batchVertxFuture(recordList -> {
                     return vertx.executeBlocking(event -> {
                         log.debug("Saw batch or records: {}", toOffsets(recordList));
@@ -85,6 +86,14 @@ public class VertxBatchTest extends VertxBaseUnitTest {
                     });
                 });
             }
+
+            @Override
+            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> received) {
+                vertxAsync.batchVertxFuture(recordList -> {
+                    batchFailPollInner(recordList);
+                    return Future.succeededFuture(msg("Saw batch or records: {}", toOffsets(recordList)));
+                });
+            }
         };
     }
 
@@ -92,16 +101,41 @@ public class VertxBatchTest extends VertxBaseUnitTest {
     void averageBatchSizeTest(Vertx vertx, VertxTestContext tc) {
         this.vertx = vertx;
         this.tc = tc;
-        batchTestMethods.averageBatchSizeTestMethod(10000);
+        averageBatchSizeTest();
         tc.completeNow();
+    }
+
+    @Override
+    public void averageBatchSizeTest() {
+        batchTestMethods.averageBatchSizeTest(10000);
     }
 
     @ParameterizedTest
     @EnumSource
-    void batch(ParallelConsumerOptions.ProcessingOrder order, Vertx vertx, VertxTestContext tc) {
+    void simpleBatchTest(ParallelConsumerOptions.ProcessingOrder order, Vertx vertx, VertxTestContext tc) {
         this.vertx = vertx;
         this.tc = tc;
-        batchTestMethods.batchTestMethod(order);
+        simpleBatchTest(order);
         tc.completeNow();
+    }
+
+    @Override
+    public void simpleBatchTest(ParallelConsumerOptions.ProcessingOrder order) {
+        batchTestMethods.simpleBatchTest(order);
+    }
+
+
+    @ParameterizedTest
+    @EnumSource
+    public void batchFailureTest(Vertx vertx, VertxTestContext tc, ParallelConsumerOptions.ProcessingOrder order) {
+        this.vertx = vertx;
+        this.tc = tc;
+        batchFailureTest(order);
+        tc.completeNow();
+    }
+
+    @Override
+    public void batchFailureTest(ParallelConsumerOptions.ProcessingOrder order) {
+        batchTestMethods.batchFailureTest(order);
     }
 }

@@ -103,7 +103,9 @@
         <version.unij>0.1.3</version.unij>
 
         <!-- tests -->
-        <parallel-tests>false</parallel-tests>
+        <parallel-tests>true</parallel-tests>
+
+        <!-- tests deps-->
         <junit.version>5.7.0</junit.version>
         <junit.platform.version>1.7.0</junit.platform.version>
         <testcontainers.version>1.16.3</testcontainers.version>

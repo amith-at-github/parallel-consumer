@@ -26,7 +26,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
  */
 @Timeout(value = 1, unit = MINUTES)
 @Slf4j
-public class BatchTest extends ParallelEoSStreamProcessorTestBase {
+public class BatchTest extends ParallelEoSStreamProcessorTestBase implements BatchTestBase {
 
     BatchTestMethods<Void> batchTestMethods;
 
@@ -41,7 +41,7 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
 
             @SneakyThrows
             @Override
-            protected Void pollStep(List<ConsumerRecord<String, String>> recordList) {
+            protected Void averageBatchSizeTestPollStep(List<ConsumerRecord<String, String>> recordList) {
                 try {
                     Thread.sleep(30);
                 } catch (InterruptedException e) {
@@ -51,10 +51,10 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
             }
 
             @Override
-            protected void averageBatchSizePoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter
+            protected void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter
                     statusLogger) {
                 parallelConsumer.pollBatch(recordList -> {
-                    pollInner(numBatches, numRecords, statusLogger, recordList);
+                    averageBatchSizeTestPollInner(numBatches, numRecords, statusLogger, recordList);
                 });
             }
 
@@ -64,25 +64,40 @@ public class BatchTest extends ParallelEoSStreamProcessorTestBase {
             }
 
             @Override
-            public void batchPoll(List<List<ConsumerRecord<String, String>>> received) {
-                parallelConsumer.pollBatch(x -> {
-                    log.debug("Batch of messages: {}", toOffsets(x));
-                    received.add(x);
+            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received) {
+                parallelConsumer.pollBatch(pollBatch -> {
+                    log.debug("Batch of messages: {}", toOffsets(pollBatch));
+                    received.add(pollBatch);
+                });
+            }
+
+            @Override
+            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> received) {
+                parallelConsumer.pollBatch(pollBatch -> {
+                    batchFailPollInner(pollBatch);
+                    received.add(pollBatch);
                 });
             }
         };
     }
 
-
     @Test
-    void averageBatchSizeTest() {
-        batchTestMethods.averageBatchSizeTestMethod(50000);
+    public void averageBatchSizeTest() {
+        batchTestMethods.averageBatchSizeTest(50000);
     }
 
     @ParameterizedTest
     @EnumSource
-    void batch(ParallelConsumerOptions.ProcessingOrder order) {
-        batchTestMethods.batchTestMethod(order);
+    @Override
+    public void simpleBatchTest(ParallelConsumerOptions.ProcessingOrder order) {
+        batchTestMethods.simpleBatchTest(order);
+    }
+
+    @ParameterizedTest
+    @EnumSource
+    @Override
+    public void batchFailureTest(ParallelConsumerOptions.ProcessingOrder order) {
+        batchTestMethods.batchFailureTest(order);
     }
 
 }

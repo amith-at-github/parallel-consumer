@@ -8,7 +8,6 @@ import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.internal.RateLimiter;
-import io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -16,10 +15,12 @@ import me.tongfei.progressbar.ProgressBar;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase.defaultTimeout;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.PARTITION;
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.UNORDERED;
@@ -27,19 +28,42 @@ import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.waitAtMost;
 
+/**
+ * Batch test which can be used in the different modules. The need for this is because the batch methods in each module
+ * all have different signatures, and return types.
+ */
 @Slf4j
 @RequiredArgsConstructor
 public abstract class BatchTestMethods<POLL_RETURN> {
 
+    public static final long FAILURE_TARGET = 5L;
     private final ParallelEoSStreamProcessorTestBase baseTest;
 
-    //todo rename
-    public void averageBatchSizeTestMethod(int numRecsExpected) {
-        // test settings
+    protected abstract KafkaTestUtils getKtu();
+
+
+    protected void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
+        //
+        ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
+                .batchSize(targetBatchSize)
+                .ordering(ordering)
+                .maxConcurrency(maxConcurrency)
+                .build();
+        baseTest.setupParallelConsumerInstance(options);
+
+        //
+        baseTest.parentParallelConsumer.setTimeBetweenCommits(ofSeconds(5));
+    }
+
+    protected abstract AbstractParallelEoSStreamProcessor getPC();
+
+    public List<Long> toOffsets(final List<ConsumerRecord<String, String>> x) {
+        return x.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
+    }
+
+    public void averageBatchSizeTest(int numRecsExpected) {
         final int targetBatchSize = 20;
         int maxConcurrency = 8;
-        int processorDelayMs = 30;
-        int initialDynamicLoadFactor = targetBatchSize * 100;
 
         ProgressBar bar = ProgressBarUtils.getNewMessagesBar(log, numRecsExpected);
 
@@ -54,7 +78,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         long start = System.currentTimeMillis();
         RateLimiter statusLogger = new RateLimiter(1);
 
-        averageBatchSizePoll(numBatches, numRecordsProcessed, statusLogger);
+        averageBatchSizeTestPoll(numBatches, numRecordsProcessed, statusLogger);
 
         //
         waitAtMost(defaultTimeout).alias("expected number of records")
@@ -70,15 +94,19 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         log.debug("Processed {} records in {} ms. Average batch size was: {}. {} records per second.", numRecsExpected, duration, averageBatchSize, numRecsExpected / (duration / 1000.0));
 
         //
-        double targetMetThreshold = 0.9;
+        double targetMetThreshold = 3. / 4.;
         double acceptableAttainedBatchSize = targetBatchSize * targetMetThreshold;
         assertThat(averageBatchSize).isGreaterThan(acceptableAttainedBatchSize);
+
+        baseTest.waitForCommitExact(numRecsExpected);
     }
 
-    protected abstract KafkaTestUtils getKtu();
+    /**
+     * Must call {@link #averageBatchSizeTestPollInner}
+     */
+    protected abstract void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger);
 
-    //todo rename
-    protected POLL_RETURN pollInner(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger, List<ConsumerRecord<String, String>> recordList) {
+    protected POLL_RETURN averageBatchSizeTestPollInner(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger, List<ConsumerRecord<String, String>> recordList) {
         int size = recordList.size();
 
         statusLogger.performIfNotLimited(() -> {
@@ -96,51 +124,32 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
         try {
             log.trace("Batch size {}", size);
-            return pollStep(recordList);
+            return averageBatchSizeTestPollStep(recordList);
         } finally {
             numBatches.getAndIncrement();
             numRecords.addAndGet(size);
         }
     }
 
-    //todo rename
-    protected abstract POLL_RETURN pollStep(List<ConsumerRecord<String, String>> recordList);
-
-    /**
-     * Must call {@link #pollInner}
-     */
-    protected abstract void averageBatchSizePoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger);
+    protected abstract POLL_RETURN averageBatchSizeTestPollStep(List<ConsumerRecord<String, String>> recordList);
 
     private double calcAverage(AtomicInteger numRecords, AtomicInteger numBatches) {
         return numRecords.get() / (0.0 + numBatches.get());
     }
 
-    protected void setupParallelConsumer(int targetBatchSize, int maxConcurrency, ParallelConsumerOptions.ProcessingOrder ordering) {
-        //
-        ParallelConsumerOptions<Object, Object> options = ParallelConsumerOptions.builder()
-                .batchSize(targetBatchSize)
-                .ordering(ordering)
-                .maxConcurrency(maxConcurrency)
-                .build();
-        baseTest.setupParallelConsumerInstance(options);
 
-        //
-        baseTest.parentParallelConsumer.setTimeBetweenCommits(ofSeconds(5));
-    }
-
-    //todo rename
     @SneakyThrows
-    public void batchTestMethod(ParallelConsumerOptions.ProcessingOrder order) {
+    public void simpleBatchTest(ParallelConsumerOptions.ProcessingOrder order) {
         int batchSize = 2;
         int numRecsExpected = 5;
 
         setupParallelConsumer(batchSize, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
 
         var recs = getKtu().sendRecords(numRecsExpected);
-        List<List<ConsumerRecord<String, String>>> received = new ArrayList<>();
+        List<List<ConsumerRecord<String, String>>> received = Collections.synchronizedList(new ArrayList<>());
 
         //
-        batchPoll(received);
+        simpleBatchTestPoll(received);
 
         //
         int expectedNumOfBatches = (order == PARTITION) ?
@@ -158,21 +167,70 @@ public abstract class BatchTestMethods<POLL_RETURN> {
                 .allSatisfy(x -> assertThat(x).hasSizeLessThanOrEqualTo(batchSize))
                 .as("all messages processed")
                 .flatExtracting(x -> x).hasSameElementsAs(recs);
+
         assertThat(getPC().isClosedOrFailed()).isFalse();
 
-        // todo fix assertion of actual committed offsets
-        LongPollingMockConsumerSubject.assertThat(getKtu().getConsumerSpy())
-                .hasCommittedToAnyPartition()
-                .atLeastOffset(numRecsExpected);
+        baseTest.waitForCommitExact(numRecsExpected);
     }
 
-    protected abstract AbstractParallelEoSStreamProcessor getPC();
+    public abstract void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received);
 
-    //todo rename
-    public abstract void batchPoll(List<List<ConsumerRecord<String, String>>> received);
+    @SneakyThrows
+    public void batchFailureTest(ParallelConsumerOptions.ProcessingOrder order) {
+        int batchSize = 5;
+        int expectedNumOfMessages = 20;
 
-    public List<Long> toOffsets(final List<ConsumerRecord<String, String>> x) {
-        return x.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
+        setupParallelConsumer(batchSize, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
+
+        var recs = getKtu().sendRecords(expectedNumOfMessages);
+        List<List<ConsumerRecord<String, String>>> receivedBatches = Collections.synchronizedList(new ArrayList<>());
+
+        //
+        batchFailPoll(receivedBatches);
+
+        //
+        int expectedNumOfBatches = (int) Math.ceil(expectedNumOfMessages / (double) batchSize);
+
+        baseTest.waitForCommitExact(expectedNumOfMessages);
+
+        // due to the failure, might get one extra batch
+        assertThat(receivedBatches).hasSizeGreaterThanOrEqualTo(expectedNumOfBatches);
+
+        assertThat(receivedBatches)
+                .as("batch size")
+                .allSatisfy(receivedBatch ->
+                        assertThat(receivedBatch).hasSizeLessThanOrEqualTo(batchSize))
+                .as("all messages processed")
+                .flatExtracting(x -> x).hasSameElementsAs(recs);
+
+        //
+        assertThat(getPC().isClosedOrFailed()).isFalse();
+    }
+
+    /**
+     * Must call {@link #batchFailPollInner(List)}
+     */
+    protected abstract void batchFailPoll(List<List<ConsumerRecord<String, String>>> received);
+
+    protected POLL_RETURN batchFailPollInner(List<ConsumerRecord<String, String>> received) {
+        List<Long> offsets = received.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
+        log.debug("Got batch {}", offsets);
+
+        boolean contains = offsets.contains(FAILURE_TARGET);
+        if (contains) {
+            var target = received.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
+            var targetWc = getPC().getWm().getWorkContainerFor(target);
+            int numberOfFailedAttempts = targetWc.getNumberOfFailedAttempts();
+            int targetAttempts = 3;
+            if (numberOfFailedAttempts < targetAttempts) {
+                log.debug("Failing batch containing target offset {}", FAILURE_TARGET);
+                throw new FakeRuntimeError(msg("Testing failure processing a batch - pretend attempt #{}", numberOfFailedAttempts));
+            } else {
+                log.debug("Failing target {} now completing as has has reached target attempts {}", offsets, targetAttempts);
+            }
+        }
+        log.debug("Completing batch {}", offsets);
+        return null;
     }
 
 }

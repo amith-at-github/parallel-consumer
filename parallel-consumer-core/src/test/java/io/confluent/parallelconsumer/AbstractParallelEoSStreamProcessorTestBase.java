@@ -25,7 +25,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -52,24 +51,25 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     public ConsumerGroupMetadata DEFAULT_GROUP_METADATA;
 
-    /**
-     * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
-     * lower value shouldn't affect test speed much unless many different batches of messages are "published" as test
-     * messages are queued up at the beginning and the polled.
-     *
-     * @see LongPollingMockConsumer#poll(Duration)
-     */
-    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 500;
-
-    /**
-     * The commit interval for the main {@link AbstractParallelEoSStreamProcessor} control thread. Actually the timeout
-     * that we poll the {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop
-     * cycles, making our test waiting go faster.
-     *
-     * @see AbstractParallelEoSStreamProcessor#workMailBox
-     * @see AbstractParallelEoSStreamProcessor#processWorkCompleteMailBox
-     */
-    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
+    // todo delete - shouldn't be needed if things are truly event based, and our tests are all running in parallel, so at most the default 5 second commit time shouldn't affect test suite performance as a whole
+//    /**
+//     * The frequency with which we pretend to poll the broker for records - actually the pretend long poll timeout. A
+//     * lower value shouldn't affect test speed much unless many different batches of messages are "published" as test
+//     * messages are queued up at the beginning and the polled.
+//     *
+//     * @see LongPollingMockConsumer#poll(Duration)
+//     */
+//    public static final int DEFAULT_BROKER_POLL_FREQUENCY_MS = 500;
+//
+//    /**
+//     * The commit interval for the main {@link AbstractParallelEoSStreamProcessor} control thread. Actually the timeout
+//     * that we poll the {@link LinkedBlockingQueue} for. A lower value will increase the frequency of control loop
+//     * cycles, making our test waiting go faster.
+//     *
+//     * @see AbstractParallelEoSStreamProcessor#workMailBox
+//     * @see AbstractParallelEoSStreamProcessor#processWorkCompleteMailBox
+//     */
+//    public static final int DEFAULT_COMMIT_INTERVAL_MAX_MS = 100;
 
     protected LongPollingMockConsumer<String, String> consumerSpy;
     protected MockProducer<String, String> producerSpy;
@@ -301,7 +301,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected void waitForCommitExact(int offset) {
         log.debug("Waiting for commit offset {}", offset);
-        await().untilAsserted(() -> assertCommits(of(offset)));
+        await().timeout(defaultTimeout).untilAsserted(() -> assertCommits(of(offset)));
     }
 
 

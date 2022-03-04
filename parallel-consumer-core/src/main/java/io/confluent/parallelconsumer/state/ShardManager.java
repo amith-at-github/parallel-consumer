@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -53,6 +54,9 @@ public class ShardManager<K, V> {
     // todo performance: disable/remove if using partition order
     // todo introduce an actual Shard object to store the map, will make things clearer
     private final Map<Object, NavigableMap<Long, WorkContainer<K, V>>> processingShards = new ConcurrentHashMap<>();
+
+    // default to ~infinity
+    private Duration lowestRetryTime = Duration.ofDays(1);
 
     /**
      * The shard belonging to the given key
@@ -164,9 +168,24 @@ public class ShardManager<K, V> {
     /**
      * Idempotent - work may have not been removed, either way it's put back
      */
-    public void onFailure(WorkContainer<K, V> wc) {
-        log.debug("Work FAILED, no-op");
-//        log.debug("Work FAILED, returning to shard");
-//        addWorkContainer(wc); // todo: remove? WCs are never removed anymore?
+    public void onFailure(WorkContainer<?, ?> wc) {
+        log.debug("Work FAILED");
     }
+
+    public Duration getLowestRetryTime() {
+        long retryDelayMs = processingShards.values().parallelStream()
+                .mapToLong(x ->
+                        x.values()
+                                .parallelStream()
+                                .filter(WorkContainer::hasPreviouslyFailed)
+                                .mapToLong(y ->
+                                        y.getDelayUntilRetryDue()
+                                                .toMillis()
+                                ).min()
+                                .orElse(Long.MAX_VALUE))
+                .min()
+                .orElse(Long.MAX_VALUE);
+        return Duration.ofMillis(retryDelayMs);
+    }
+
 }

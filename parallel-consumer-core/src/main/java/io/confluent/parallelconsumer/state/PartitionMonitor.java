@@ -69,7 +69,7 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
     private final Map<TopicPartition, Integer> partitionsAssignmentEpochs = new ConcurrentHashMap<>();
 
     /**
-     * Get's set to true whenever work is returned completed, so that we know when a commit needs to be made.
+     * Gets set to true whenever work is returned completed, so that we know when a commit needs to be made.
      * <p>
      * In normal operation, this probably makes very little difference, as typical commit frequency is 1 second, so low
      * chances no work has completed in the last second.
@@ -435,11 +435,12 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
      */
     // todo remove completely as state of offsets should be tracked live, no need to scan for them - see #201
     // https://github.com/confluentinc/parallel-consumer/issues/201 Refactor: Live tracking of offsets as they change, so we don't need to scan for them
-    <R> Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
+    Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove(boolean remove) {
 
         //
         if (!isDirty()) {
             // nothing to commit
+            log.debug("State not marked dirty, skipping scan");
             return UniMaps.of();
         }
 
@@ -523,6 +524,10 @@ public class PartitionMonitor<K, V> implements ConsumerRebalanceListener {
         return Collections.unmodifiableMap(this.partitionStates.entrySet().stream()
                 .filter(e -> !e.getValue().isRemoved())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+    }
+
+    public void setClean() {
+        workStateIsDirtyNeedsCommitting.set(false);
     }
 
     public void setDirty() {
