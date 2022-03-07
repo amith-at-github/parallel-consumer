@@ -91,6 +91,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public void fail(WallClock clock) {
+        // If not explicitly retriable, put it back in with a retry counter, so it can be later given up on
         log.trace("Failing {}", this);
         numberOfFailedAttempts++;
         failedAt = Optional.of(clock.getNow());
@@ -133,6 +134,10 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         }
     }
 
+    /**
+     * @return the delay between retries e.g. retry after 1 second
+     */
+    // todo rename away from #getDelayUntilRetryDue
     public Duration getRetryDelay() {
         var retryDelayProvider = ParallelConsumerOptions.retryDelayProviderStatic;
         if (retryDelayProvider != null) {

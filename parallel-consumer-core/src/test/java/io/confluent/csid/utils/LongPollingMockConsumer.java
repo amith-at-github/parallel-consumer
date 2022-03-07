@@ -6,6 +6,7 @@ package io.confluent.csid.utils;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.consumer.internals.SubscriptionState;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
  * @param <K>
  * @param <V>
  */
+@ToString
 @Slf4j
 public class LongPollingMockConsumer<K, V> extends MockConsumer<K, V> {
 

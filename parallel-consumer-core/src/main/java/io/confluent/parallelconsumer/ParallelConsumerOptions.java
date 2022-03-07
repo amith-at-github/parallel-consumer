@@ -161,7 +161,8 @@ public class ParallelConsumerOptions<K, V> {
     public static final int DEFAULT_MAX_CONCURRENCY = 16;
 
     /**
-     * When a message fails, how long the system should wait before trying that message again.
+     * When a message fails, how long the system should wait before trying that message again. Note that this will not
+     * be exact, and is just a target.
      */
     @Builder.Default
     private final Duration defaultMessageRetryDelay = Duration.ofSeconds(1);
@@ -221,6 +222,13 @@ public class ParallelConsumerOptions<K, V> {
         return Optional.ofNullable(batchSize);
     }
 
+    /**
+     * @return the combined target of the desired concurrency by the configured batch size
+     */
+    // todo rename
+    public int getTargetRecordsOutForProcessing() {
+        return getMaxConcurrency() * getBatchSize().orElse(1);
+    }
 
     public void validate() {
         Objects.requireNonNull(consumer, "A consumer must be supplied");

@@ -3,6 +3,7 @@ package io.confluent.parallelconsumer.internal;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.CommitMode;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -116,7 +117,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                         wm.registerWork(polledRecords);
 
                         // notify control work has been registered, in case it's sleeping waiting for work that will never come
-                        if (!wm.hasWorkInFlight()) {
+                        if (wm.isStarvedForNewWork()) {
                             log.trace("Apparently no work is being done, make sure Control is awake to receive messages");
                             pc.notifySomethingToDo();
                         }
@@ -224,7 +225,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                     log.debug("Should pause but pause rate limit exceeded {} vs {}. Queued: {}",
                             pauseLimiter.getElapsedDuration(),
                             pauseLimiter.getRate(),
-                            wm.getWorkQueuedInMailboxCount());
+                            wm.getAmountOfWorkQueuedWaitingIngestion());
                 }
             }
         }

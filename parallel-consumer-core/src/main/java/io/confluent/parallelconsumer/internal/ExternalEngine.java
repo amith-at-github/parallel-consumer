@@ -1,9 +1,8 @@
 package io.confluent.parallelconsumer.internal;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
-
 import com.google.common.flogger.FluentLogger;
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import io.confluent.parallelconsumer.state.WorkContainer;
@@ -32,13 +31,13 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
     @Override
     protected int calculateQuantityToRequest() {
         int numberRecordsOutForProcessing = wm.getNumberRecordsOutForProcessing();
-        int maxConcurrency = getOptions().getMaxConcurrency();
-        int rawDelta = maxConcurrency - numberRecordsOutForProcessing;
+        int target = getOptions().getTargetRecordsOutForProcessing();
+        int rawDelta = target - numberRecordsOutForProcessing;
 
         //
         int delta = Math.max(0, rawDelta);
         flog.at(Level.FINE).atMostEvery(1, TimeUnit.SECONDS)
-                .log("Target: %s. Out currently: %s. Will request extra: %s", maxConcurrency, numberRecordsOutForProcessing, delta);
+                .log("Target: %s. Out currently: %s. Will request extra: %s", target, numberRecordsOutForProcessing, delta);
         return delta;
     }
 

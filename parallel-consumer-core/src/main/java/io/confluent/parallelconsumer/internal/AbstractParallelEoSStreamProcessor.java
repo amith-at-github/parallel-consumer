@@ -76,7 +76,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     @Getter
     private Duration timeBetweenCommits = ofMillis(KAFKA_DEFAULT_AUTO_COMMIT_FREQUENCY);
 
-    private Instant lastCommitAttemptTime = Instant.now();
+    private Instant lastCommitCheckTime = Instant.now();
 
     @Getter(PROTECTED)
     private final Optional<ProducerManager<K, V>> producerManager;
@@ -92,7 +92,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     // todo make package level
     @Getter(AccessLevel.PUBLIC)
-    protected WorkManager<K, V> wm;
+    protected final WorkManager<K, V> wm;
 
     /**
      * Collection of work waiting to be
@@ -138,6 +138,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * If the system failed with an exception, it is referenced here.
      */
     private Exception failureReason;
+
+    /**
+     * todo docs
+     */
+    private Instant lastCommitTime;
 
     public boolean isClosedOrFailed() {
         boolean closed = state == State.closed;
@@ -608,9 +613,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         if (state == running) {
             if (!wm.isSufficientlyLoaded() & brokerPollSubsystem.isPaused()) {
                 // can occur
-                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs concurrency: {})",
-                        wm.getWorkQueuedInMailboxCount(),
-                        options.getMaxConcurrency());
+                log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
+                        wm.getAmountOfWorkQueuedWaitingIngestion(),
+                        options.getTargetRecordsOutForProcessing());
                 brokerPollSubsystem.wakeupIfPaused();
             }
         }
@@ -781,7 +786,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Checks the system has enough pressure, if not attempts to step up the load factor.
      */
     protected void checkPressure() {
-        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getWorkQueuedInMailboxCount() > options.getMaxConcurrency();
+        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getAmountOfWorkQueuedWaitingIngestion() > options.getTargetRecordsOutForProcessing();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
                             "if (isPoolQueueLow() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {} && lastWorkRequestWasFulfilled {}))",
@@ -809,17 +814,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return aim to never have the pool queue drop below this
      */
     private int getPoolConcurrencyTarget() {
-        //noinspection unchecked - lombok builder erases the generis of batchSize
-        int effectiveBatchSize = (int) options.getBatchSize().orElse(1);
-//        return options.getMaxConcurrency() * effectiveBatchSize;
-        return options.getMaxConcurrency();
+        return options.getTargetRecordsOutForProcessing();
     }
 
     private boolean isPoolQueueLow() {
         int queueSize = getNumberOfUserFunctionsQueued();
         int queueTarget = getPoolConcurrencyTarget();
         boolean workAmountBelowTarget = queueSize <= queueTarget;
-        boolean hasWorkInMailboxes = wm.hasWorkInMailboxes();
+        boolean hasWorkInMailboxes = wm.hasWorkAwaitingIngestionToShards();
         log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
                 workAmountBelowTarget, queueSize, queueTarget, hasWorkInMailboxes);
         return workAmountBelowTarget && hasWorkInMailboxes;
@@ -856,17 +858,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
-        // if paused, we won't be doing any work
-        boolean workAvailable = wm.hasWorkInMailboxes() && wm.isSystemIdle();
-        boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running) && !workAvailable;
-
-        // todo possible remove this check and just use the time calculation?
-        boolean shouldLongPoll = noWorkToDoAndStillRunning;
-        if (noWorkToDoAndStillRunning && isShouldCommitNow()) {
-            log.debug("Should long poll, however it's time to commit");
-        }
-
-        if (shouldLongPoll) {
+        if (!timeToBlockFor.isZero()) {
             if (log.isDebugEnabled()) {
                 log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
                         timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
@@ -905,13 +897,51 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     /**
+     * The amount of time to block poll in this cycle
+     *
      * @return either the duration until next commit, or next work retry
+     * @see WorkManager#isStarvedForNewWork()
+     * @see WorkManager#getTotalWorkAwaitingProcessing()
+     * @see ParallelConsumerOptions#getTargetRecordsOutForProcessing()
      */
     private Duration getTimeToBlockFor() {
-        Duration effectiveCommitAttemptDelay = wm.isDirty() ? getTimeToNextCommitCheck() : getTimeBetweenCommits();
-        var retryTime = wm.getLowestRetryTime();
-        boolean commitDelayIsLower = effectiveCommitAttemptDelay.compareTo(retryTime) < 0;
-        return commitDelayIsLower ? effectiveCommitAttemptDelay : retryTime;
+        // old
+
+        //        // if paused, we won't be doing any work
+//        boolean workAvailable = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
+//        boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running) && !workAvailable;
+
+//        // todo possible remove this check and just use the time calculation? - yes
+//        boolean shouldLongPoll = noWorkToDoAndStillRunning;
+//        if (noWorkToDoAndStillRunning && isShouldCommitNow()) {
+//            log.debug("Should long poll, however it's time to commit");
+//        }
+
+
+        // new
+
+//        synchronized (wm)
+        {
+            // should not block as not enough work is being done, and there's more work to ingest
+            boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
+            if (ingestionWorkAndStarved) {
+                return Duration.ofMillis(0);
+            }
+        }
+
+        // broker poller will interrupt the control thread, if it has records to offer while the system is starving for new work
+//        Duration effectiveCommitAttemptDelay = isShouldCheckCommitNow() ? Duration.ofMillis(0) : getTimeToNextCommitCheck();
+        Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
+
+        // though check if we have work awaiting retry
+        var lowestScheduled = wm.getLowestRetryTime();
+        Duration retryDelay = options.getDefaultMessageRetryDelay();
+        // at min block for the retry time - retry time is not exact
+        lowestScheduled = lowestScheduled.toSeconds() < retryDelay.toSeconds() ? retryDelay : lowestScheduled;
+
+        boolean commitDelayIsLower = effectiveCommitAttemptDelay.compareTo(lowestScheduled) < 0;
+
+        return commitDelayIsLower ? effectiveCommitAttemptDelay : lowestScheduled;
     }
 
     /**
@@ -938,12 +968,19 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //                }
 //            }
 //        }
+        updateLastCommitCheckTime();
     }
 
-    private boolean isShouldCommitNow() {
-        Duration elapsedSinceLast = getTimeSinceLastCommitAttempt();
+//    private boolean isShouldCheckCommitNow() {
+//        lastCommitCheckTime.plus(options.get)
+//        Duration elapsedSinceLast = getTimeSinceLastCheck();
+//    }
 
-        boolean commitFrequencyOK = elapsedSinceLast.compareTo(timeBetweenCommits) > 0;
+
+    private boolean isShouldCommitNow() {
+        Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
+
+        boolean commitFrequencyOK = elapsedSinceLastCommit.compareTo(timeBetweenCommits) > 0;
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean isCommandedToCommit = isCommandedToCommit();
 
@@ -985,13 +1022,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         boolean workWaitingToCommit = wm.hasWorkInCommitQueues();
         log.trace("workIsWaitingToBeCompletedSuccessfully {} || workInFlight {} || workWaitingInMailbox {} || !workWaitingToCommit {};",
                 workIsWaitingToBeCompletedSuccessfully, workInFlight, workWaitingInMailbox, !workWaitingToCommit);
-        return workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
+        boolean result = workIsWaitingToBeCompletedSuccessfully || workInFlight || workWaitingInMailbox || !workWaitingToCommit;
+
+        // disable - commit frequency takes care of lingering? is this outdated?
+        return false;
     }
 
     private Duration getTimeToNextCommitCheck() {
         // draining is a normal running mode for the controller
         if (state == running || state == draining) {
-            Duration timeSinceLastCommit = getTimeSinceLastCommitAttempt();
+            Duration timeSinceLastCommit = getTimeSinceLastCheck();
             Duration timeBetweenCommits = getTimeBetweenCommits();
             @SuppressWarnings("UnnecessaryLocalVariable")
             Duration minus = timeBetweenCommits.minus(timeSinceLastCommit);
@@ -1002,23 +1042,26 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private Duration getTimeSinceLastCommitAttempt() {
+    private Duration getTimeSinceLastCheck() {
         Instant now = clock.getNow();
-        return Duration.between(lastCommitAttemptTime, now);
+        return Duration.between(lastCommitCheckTime, now);
     }
 
     private void commitOffsetsThatAreReady() {
-        if (wm.isClean()) {
+        if (wm.isClean() && !isCommandedToCommit()) {
             log.debug("Nothing changed since last commit, skipping");
         } else {
             log.debug("Committing offsets that are ready...");
-            committer.retrieveOffsetsAndCommit();
+            synchronized (commitCommand) {
+                committer.retrieveOffsetsAndCommit();
+                clearCommitCommand();
+            }
         }
-        updateLastCommitAttemptTime();
+        this.lastCommitTime = Instant.now();
     }
 
-    private void updateLastCommitAttemptTime() {
-        lastCommitAttemptTime = Instant.now();
+    private void updateLastCommitCheckTime() {
+        lastCommitCheckTime = Instant.now();
     }
 
     /**
@@ -1104,17 +1147,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #blockableControlThread
      */
     public void notifySomethingToDo() {
-        if (currentlyPollingWorkCompleteMailBox.get()) {
-            boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
-            if (noTransactionInProgress) {
-                log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
-                interruptControlThread();
-            } else {
-                log.trace("Would have interrupted control thread, but TX in progress");
-            }
+//        if (currentlyPollingWorkCompleteMailBox.get()) {
+        boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
+        if (noTransactionInProgress) {
+            log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
+            interruptControlThread();
         } else {
-            log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next looop.");
+            log.trace("Would have interrupted control thread, but TX in progress");
         }
+//        } else {
+//            log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next loop.");
+//        }
     }
 
     @Override
@@ -1147,12 +1190,16 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private boolean isCommandedToCommit() {
         synchronized (commitCommand) {
-            boolean commitAsap = this.commitCommand.get();
-            if (commitAsap) {
+            return this.commitCommand.get();
+        }
+    }
+
+    private void clearCommitCommand() {
+        synchronized (commitCommand) {
+            if (commitCommand.get()) {
                 log.debug("Command to commit asap received, clearing");
                 this.commitCommand.set(false);
             }
-            return commitAsap;
         }
     }
 

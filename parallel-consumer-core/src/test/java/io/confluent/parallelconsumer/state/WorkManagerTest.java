@@ -540,7 +540,7 @@ class WorkManagerTest {
         }
 
         //
-        assertThat(wm.getSm().getWorkQueuedInShardsCountAwaitingSelection()).isZero();
+        assertThat(wm.getSm().getNumberOfWorkQueuedInShardsAwaitingSelection()).isZero();
         assertThat(wm.getNumberOfEntriesInPartitionQueues()).isEqualTo(3);
 
         // drain commit queue

@@ -89,7 +89,8 @@ public class ShardManager<K, V> {
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
-    public long getWorkQueuedInShardsCountAwaitingSelection() {
+    // todo rename to "number"
+    public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         long count = this.processingShards.values().parallelStream()
                 .flatMap(x -> x.values().stream())
                 // missing pm.isBlocked(topicPartition) ?
@@ -123,8 +124,12 @@ public class ShardManager<K, V> {
 
     private void removeShardFor(final WorkContainer<K, V> work) {
         Object shardKey = computeShardKey(work.getCr());
-        log.debug("Removing shard referenced by WC: {} for shard key: {}", work, shardKey);
-        this.processingShards.remove(shardKey);
+        if (this.processingShards.containsKey(shardKey)) {
+            log.debug("Removing shard referenced by WC: {} for shard key: {}", work, shardKey);
+            this.processingShards.remove(shardKey);
+        } else {
+            log.trace("Shard referenced by WC: {} with shard key: {} already removed", work, shardKey);
+        }
     }
 
     public void addWorkContainer(final WorkContainer<K, V> wc) {
@@ -173,6 +178,7 @@ public class ShardManager<K, V> {
     }
 
     public Duration getLowestRetryTime() {
+        // todo replace with cache with using a Priority Queue
         long retryDelayMs = processingShards.values().parallelStream()
                 .mapToLong(x ->
                         x.values()

@@ -114,6 +114,7 @@ public class PartitionState<K, V> {
         // rise the high water mark
         Long oldHighestSeen = this.offsetHighestSeen;
         if (oldHighestSeen == null || highestSeen >= oldHighestSeen) {
+            log.trace("Updating highest seen - was: {} now: {}", offsetHighestSeen, highestSeen);
             offsetHighestSeen = highestSeen;
         }
     }

@@ -97,6 +97,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
+    // todo remove?
+    @Getter
+    private Duration nextLowestRetryTime;
+
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
@@ -201,6 +205,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 //        } catch (InterruptedException e) {
 //            e.printStackTrace();
 //        }
+
+        // any work available to retried with system constraints, will be done so now
+        resetNextLowestRetryTimeAt();
+
         int workToGetDelta = requestedMaxWorkToRetrieve;
 
         // optimise early
@@ -327,7 +335,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // todo rename - shunt messages from internal buffer into queues
     private int tryToEnsureQuantityOfWorkQueuedAvailable(final int requestedMaxWorkToRetrieve) {
         // todo this counts all partitions as a whole - this may cause some partitions to starve. need to round robin it?
-        long available = sm.getWorkQueuedInShardsCountAwaitingSelection();
+        long available = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         long extraNeededFromInboxToSatisfy = requestedMaxWorkToRetrieve - available;
         log.debug("Requested: {}, available in shards: {}, will try to process from mailbox the delta of: {}",
                 requestedMaxWorkToRetrieve, available, extraNeededFromInboxToSatisfy);
@@ -342,10 +350,9 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     // todo move PM or SM?
     public void onSuccess(WorkContainer<K, V> wc) {
-        log.trace("Processing success...");
+        log.trace("Work success ({}), removing from processing shard queue", wc);
         pm.setDirty();
         ConsumerRecord<K, V> cr = wc.getCr();
-        log.trace("Work success ({}), removing from processing shard queue", wc);
         wc.succeed();
 
         // update as we go
@@ -353,7 +360,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         sm.onSuccess(cr);
 
         // notify listeners
-        successfulWorkListeners.forEach((c) -> c.accept(wc));
+        successfulWorkListeners.forEach(c -> c.accept(wc));
 
         numberRecordsOutForProcessing--;
     }
@@ -368,18 +375,30 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public void onFailure(WorkContainer<K, V> wc) {
         // error occurred, put it back in the queue if it can be retried
-        // if not explicitly retriable, put it back in with an try counter so it can be later given up on
         wc.fail(clock);
         sm.onFailure(wc);
+        updateNextLowestRetryTimeAt(wc);
         numberRecordsOutForProcessing--;
+    }
+
+    private void resetNextLowestRetryTimeAt() {
+        this.nextLowestRetryTime = null;
+    }
+
+    private void updateNextLowestRetryTimeAt(WorkContainer<K, V> wc) {
+        Duration thisDue = wc.getDelayUntilRetryDue();
+        boolean thisWorkNeedsRetrySooner = this.nextLowestRetryTime == null || thisDue.compareTo(this.nextLowestRetryTime) < 0;
+        if (thisWorkNeedsRetrySooner) {
+            this.nextLowestRetryTime = thisDue;
+        }
     }
 
     public long getNumberOfEntriesInPartitionQueues() {
         return pm.getNumberOfEntriesInPartitionQueues();
     }
 
-    public Integer getWorkQueuedInMailboxCount() {
-        return wmbm.getWorkQueuedInMailboxCount();
+    public Integer getAmountOfWorkQueuedWaitingIngestion() {
+        return wmbm.getAmountOfWorkQueuedWaitingIngestion();
     }
 
     // todo rename
@@ -422,7 +441,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getWorkQueuedInMailboxCount() > options.getMaxConcurrency() * getLoadingFactor();
+        return getAmountOfWorkQueuedWaitingIngestion() > options.getTargetRecordsOutForProcessing() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -453,13 +472,13 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * @return Work count in mailbox plus work added to the processing shards
      */
     public long getTotalWorkAwaitingProcessing() {
-        long workQueuedInShardsCount = sm.getWorkQueuedInShardsCountAwaitingSelection();
-        Integer workQueuedInMailboxCount = getWorkQueuedInMailboxCount();
+        long workQueuedInShardsCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        Integer workQueuedInMailboxCount = getAmountOfWorkQueuedWaitingIngestion();
         return workQueuedInShardsCount + workQueuedInMailboxCount;
     }
 
-    public boolean hasWorkInMailboxes() {
-        return getWorkQueuedInMailboxCount() > 0;
+    public boolean hasWorkAwaitingIngestionToShards() {
+        return getAmountOfWorkQueuedWaitingIngestion() > 0;
     }
 
     public boolean hasWorkInCommitQueues() {
@@ -467,8 +486,8 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isRecordsAwaitingProcessing() {
-        long partitionWorkRemainingCount = sm.getWorkQueuedInShardsCountAwaitingSelection();
-        boolean internalQueuesNotEmpty = hasWorkInMailboxes();
+        long partitionWorkRemainingCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+        boolean internalQueuesNotEmpty = hasWorkAwaitingIngestionToShards();
         return partitionWorkRemainingCount > 0 || internalQueuesNotEmpty;
     }
 
@@ -496,7 +515,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         }
     }
 
-    public boolean isSystemIdle() {
+    public boolean isNoRecordsOutForProcessing() {
         return getNumberRecordsOutForProcessing() == 0;
     }
 
@@ -508,5 +527,14 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public Duration getLowestRetryTime() {
         return sm.getLowestRetryTime();
+    }
+
+    /**
+     * @return true if more records are needed to be sent out for processing (not enough in queues to satisfy
+     * concurrency target)
+     */
+    public boolean isStarvedForNewWork() {
+        long queued = getTotalWorkAwaitingProcessing();
+        return queued > options.getTargetRecordsOutForProcessing();
     }
 }

@@ -4,12 +4,14 @@ package io.confluent.parallelconsumer;
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
+import com.google.common.truth.Truth;
 import io.confluent.csid.utils.KafkaTestUtils;
 import io.confluent.csid.utils.LongPollingMockConsumer;
 import io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder;
 import io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
+import io.confluent.parallelconsumer.truth.LongPollingMockConsumerSubject;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.*;
@@ -76,7 +78,7 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
 
     protected AbstractParallelEoSStreamProcessor<String, String> parentParallelConsumer;
 
-    public static int defaultTimeoutSeconds = 30;
+    public static int defaultTimeoutSeconds = 5;
 
     public static Duration defaultTimeout = ofSeconds(defaultTimeoutSeconds);
     protected static long defaultTimeoutMs = defaultTimeout.toMillis();
@@ -299,9 +301,11 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         waitAtMost(defaultTimeout.multipliedBy(100)).until(() -> loopCount.get() > waitForCount);
     }
 
+    // todo rename to await to match awaitility
     protected void waitForCommitExact(int offset) {
         log.debug("Waiting for commit offset {}", offset);
-        await().timeout(defaultTimeout).untilAsserted(() -> assertCommits(of(offset)));
+        await().timeout(defaultTimeout)
+                .untilAsserted(() -> assertCommits(of(offset)));
     }
 
 
@@ -430,4 +434,12 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         waitForOneLoopCycle();
     }
 
+    /**
+     * Assert {@link com.google.common.truth.Truth} on the test {@link Consumer} ({@link LongPollingMockConsumer}).
+     */
+    protected LongPollingMockConsumerSubject<String, String> assertThatConsumer(String msg) {
+        return Truth.assertWithMessage(msg)
+                .about(LongPollingMockConsumerSubject.<String, String>mockConsumers())
+                .that(consumerSpy);
+    }
 }
