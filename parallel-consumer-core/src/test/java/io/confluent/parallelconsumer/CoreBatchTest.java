@@ -12,19 +12,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static java.util.concurrent.TimeUnit.MINUTES;
-
 /**
  * Basic tests for batch processing functionality
  */
-@Timeout(value = 1, unit = MINUTES)
+//@Timeout(value = 1, unit = MINUTES)
 @Slf4j
 public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements BatchTestBase {
 

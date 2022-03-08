@@ -351,7 +351,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // todo move PM or SM?
     public void onSuccess(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
-        pm.setDirty();
 
         wc.succeed();
 
@@ -366,11 +365,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     /**
+     * Can run from controller or poller thread, depending on which is responsible for committing
+     *
      * @see PartitionMonitor#onOffsetCommitSuccess(Map)
      */
-    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> offsetsToSend) {
-        pm.onOffsetCommitSuccess(offsetsToSend);
-        setClean();
+    public void onOffsetCommitSuccess(Map<TopicPartition, OffsetAndMetadata> committed) {
+        pm.onOffsetCommitSuccess(committed);
     }
 
     public void onFailure(WorkContainer<K, V> wc) {
@@ -404,10 +404,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     // todo rename
     public Map<TopicPartition, OffsetAndMetadata> findCompletedEligibleOffsetsAndRemove() {
         return pm.findCompletedEligibleOffsetsAndRemove();
-    }
-
-    public boolean hasCommittableOffsets() {
-        return pm.isDirty();
     }
 
     /**
@@ -458,18 +454,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean isWorkInFlightMeetingTarget() {
         return getNumberRecordsOutForProcessing() >= options.getTargetRecordsOutForProcessing();
-    }
-
-    public boolean isClean() {
-        return pm.isClean();
-    }
-
-    public boolean isDirty() {
-        return pm.isDirty();
-    }
-
-    private void setClean() {
-        pm.setClean();
     }
 
     /**

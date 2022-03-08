@@ -936,7 +936,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //        Duration effectiveCommitAttemptDelay = isShouldCheckCommitNow() ? Duration.ofMillis(0) : getTimeToNextCommitCheck();
 
 
-
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
         if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
@@ -999,15 +998,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         boolean lingerBeneficial = lingeringOnCommitWouldBeBeneficial();
         boolean isCommandedToCommit = isCommandedToCommit();
 
-        boolean isDirty = wm.isDirty();
-        boolean shouldDoANormalCommit = isDirty && commitFrequencyOK && !lingerBeneficial;
+        boolean shouldDoANormalCommit = commitFrequencyOK && !lingerBeneficial;
 
         boolean shouldCommitNow = shouldDoANormalCommit || isCommandedToCommit;
 
         if (log.isDebugEnabled()) {
             log.debug("Should commit this cycle? " +
                     "shouldCommitNow? " + shouldCommitNow + " : " +
-                    "isDirty()? " + isDirty + ", " +
                     "shouldDoANormalCommit? " + shouldDoANormalCommit + ", " +
                     "commitFrequencyOK? " + commitFrequencyOK + ", " +
                     "lingerBeneficial? " + lingerBeneficial + ", " +
@@ -1063,14 +1060,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void commitOffsetsThatAreReady() {
-        if (wm.isClean() && !isCommandedToCommit()) {
-            log.debug("Nothing changed since last commit, skipping");
-        } else {
-            log.debug("Committing offsets that are ready...");
-            synchronized (commitCommand) {
-                committer.retrieveOffsetsAndCommit();
-                clearCommitCommand();
-            }
+        log.debug("Committing offsets that are ready...");
+        synchronized (commitCommand) {
+            committer.retrieveOffsetsAndCommit();
+            clearCommitCommand();
         }
         this.lastCommitTime = Instant.now();
     }

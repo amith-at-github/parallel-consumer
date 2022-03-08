@@ -141,38 +141,56 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
     @SneakyThrows
     public void simpleBatchTest(ParallelConsumerOptions.ProcessingOrder order) {
-        int batchSize = 2;
+        int batchSizeSetting = 2;
         int numRecsExpected = 5;
 
-        setupParallelConsumer(batchSize, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
+        getPC().setTimeBetweenCommits(ofSeconds(1));
+
+        setupParallelConsumer(batchSizeSetting, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
 
         var recs = getKtu().sendRecords(numRecsExpected);
-        List<List<ConsumerRecord<String, String>>> received = Collections.synchronizedList(new ArrayList<>());
+        List<List<ConsumerRecord<String, String>>> batchesReceived = Collections.synchronizedList(new ArrayList<>());
 
         //
-        simpleBatchTestPoll(received);
+        simpleBatchTestPoll(batchesReceived);
 
         //
         int expectedNumOfBatches = (order == PARTITION) ?
                 numRecsExpected : // partition ordering restricts the batch sizes to a single element as all records are in a single partition
-                (int) Math.ceil(numRecsExpected / (double) batchSize);
+                (int) Math.ceil(numRecsExpected / (double) batchSizeSetting);
 
         waitAtMost(defaultTimeout).alias("expected number of batches")
                 .failFast(() -> getPC().isClosedOrFailed())
                 .untilAsserted(() -> {
-                    assertThat(received).hasSize(expectedNumOfBatches);
+                    assertThat(batchesReceived).hasSize(expectedNumOfBatches);
                 });
 
-        assertThat(received)
+        assertThat(batchesReceived)
                 .as("batch size")
-                .allSatisfy(x -> assertThat(x).hasSizeLessThanOrEqualTo(batchSize))
+                .allSatisfy(receivedBatchEntry -> assertThat(receivedBatchEntry).hasSizeLessThanOrEqualTo(batchSizeSetting))
                 .as("all messages processed")
                 .flatExtracting(x -> x).hasSameElementsAs(recs);
 
         assertThat(getPC().isClosedOrFailed()).isFalse();
 
-        getPC().closeDrainFirst();
+//        await().atMost(defaultTimeout)
+//                .untilAsserted(() -> {
+//                    long numberOfEntriesInPartitionQueues = getPC().getWm().getNumberOfEntriesInPartitionQueues();
+//                    ShardManager sm = getPC().getWm().getSm();
+//                    PartitionMonitor pm = getPC().getWm().getPm();
+//                    long numberOfWorkQueuedInShardsAwaitingSelection = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
+//                    Set assignment = getKtu().getConsumerSpy().assignment();
+//                    TopicPartition o = (TopicPartition) assignment.stream().findFirst().get();
+//                    PartitionState partitionState = pm.getPartitionState(o);
+//                    Set incompleteOffsets = partitionState.getIncompleteOffsets();
+//
+//                    assertThat(incompleteOffsets).isEmpty();
+//                });
+
+
         baseTest.awaitForCommit(numRecsExpected);
+//        getPC().requestCommitAsap();
+        getPC().closeDrainFirst();
     }
 
     public abstract void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received);
