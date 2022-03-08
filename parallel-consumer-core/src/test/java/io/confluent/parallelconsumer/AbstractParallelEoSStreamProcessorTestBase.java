@@ -264,17 +264,17 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         controlLoopPauseLatch.countDown();
     }
 
-    protected void waitForOneLoopCycle() {
-        waitForSomeLoopCycles(1);
+    protected void awaitForOneLoopCycle() {
+        awaitForSomeLoopCycles(1);
     }
 
-    protected void waitForSomeLoopCycles(int thisManyMore) {
+    protected void awaitForSomeLoopCycles(int thisManyMore) {
         log.debug("Waiting for {} more iterations of the control loop.", thisManyMore);
         blockingLoopLatchTrigger(thisManyMore);
         log.debug("Completed waiting on {} loop(s)", thisManyMore);
     }
 
-    protected void waitUntilTrue(Callable<Boolean> booleanCallable) {
+    protected void awaitUntilTrue(Callable<Boolean> booleanCallable) {
         waitAtMost(defaultTimeout).until(booleanCallable);
     }
 
@@ -296,20 +296,20 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     @SneakyThrows
-    private void waitForLoopCount(int waitForCount) {
+    private void awaitForLoopCount(int waitForCount) {
         log.debug("Waiting on {} cycles on loop latch...", waitForCount);
         waitAtMost(defaultTimeout.multipliedBy(100)).until(() -> loopCount.get() > waitForCount);
     }
 
     // todo rename to await to match awaitility
-    protected void waitForCommitExact(int offset) {
+    protected void awaitForCommitExact(int offset) {
         log.debug("Waiting for commit offset {}", offset);
         await().timeout(defaultTimeout)
                 .untilAsserted(() -> assertCommits(of(offset)));
     }
 
 
-    protected void waitForCommitExact(int partition, int offset) {
+    protected void awaitForCommitExact(int partition, int offset) {
         log.debug("Waiting for commit offset {} on partition {}", offset, partition);
         var expectedOffset = new OffsetAndMetadata(offset, "");
         TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
@@ -418,20 +418,20 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
             log.debug("Releasing {}...", i);
             locks.get(i).countDown();
         }
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
     }
 
     protected void releaseAndWait(List<CountDownLatch> locks, int lockIndex) {
         log.debug("Releasing {}...", lockIndex);
         locks.get(lockIndex).countDown();
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
     }
 
     protected void pauseControlToAwaitForLatch(CountDownLatch latch) {
         pauseControlLoop();
         awaitLatch(latch);
         resumeControlLoop();
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
     }
 
     /**

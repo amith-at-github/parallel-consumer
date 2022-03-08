@@ -55,7 +55,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         awaitLatch(latch);
 
-        waitForSomeLoopCycles(2);
+        awaitForSomeLoopCycles(2);
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
@@ -84,7 +84,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         resumeControlLoop();
 
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
 
         verify(myRecordProcessingAction, times(1)).apply(any());
 
@@ -119,7 +119,7 @@ public class JStreamParallelEoSStreamProcessorTest extends ParallelEoSStreamProc
 
         awaitLatch(latch);
 
-        waitForSomeLoopCycles(1);
+        awaitForSomeLoopCycles(1);
 
         verify(myRecordProcessingAction, times(2)).apply(any());
 

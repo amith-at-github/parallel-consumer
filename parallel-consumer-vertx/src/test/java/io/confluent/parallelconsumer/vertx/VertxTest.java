@@ -154,7 +154,7 @@ class VertxTest extends VertxBaseUnitTest {
         awaitLatch(latch);
 
         //
-        waitForOneLoopCycle();
+        awaitForOneLoopCycle();
 
         // verify
         var res = getResults(futureStream);

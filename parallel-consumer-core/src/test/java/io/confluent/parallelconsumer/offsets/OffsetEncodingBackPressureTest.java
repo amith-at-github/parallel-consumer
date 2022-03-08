@@ -124,9 +124,9 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
             // # assert commit ok - nothing blocked
             {
                 //
-                waitForSomeLoopCycles(1);
+                awaitForSomeLoopCycles(1);
                 parallelConsumer.requestCommitAsap();
-                waitForSomeLoopCycles(1);
+                awaitForSomeLoopCycles(1);
 
                 // initial 0 offset is committed with they offset encoded payload
                 assertThatConsumer("Initial commit has been executed")
@@ -163,7 +163,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue(); // should initially be not blocked
 
                 ktu.send(consumerSpy, ktu.generateRecords(extraRecordsToBlockWithThresholdBlocks));
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
 
                 // assert partition now blocked from threshold
                 waitAtMost(ofSeconds(30)).untilAsserted(() -> assertThat(wm.getPm().isBlocked(topicPartition))
@@ -175,7 +175,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                         .isGreaterThan(numberOfRecords); // high watermark is beyond our initial processed count upon blocking
 
                 parallelConsumer.requestCommitAsap();
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
 
                 // assert blocked, but can still write payload
                 // assert the committed offset metadata contains a payload
@@ -206,7 +206,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 msgLockThree.countDown(); // unlock to make state dirty to get a commit
                 ktu.send(consumerSpy, ktu.generateRecords(extraMessages));
 
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 parallelConsumer.requestCommitAsap();
 
                 //
@@ -231,12 +231,12 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                 msgLock.countDown();
 
                 // wait for the retry
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 sleepQuietly(aggressiveDelay.toMillis());
                 await().until(() -> attempts.get() >= 2);
 
                 // assert partition still blocked
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isFalse());
 
                 // release the message for the second time, allowing it to succeed
@@ -245,7 +245,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
 
             // assert partition is now not blocked
             {
-                waitForOneLoopCycle();
+                awaitForOneLoopCycle();
                 await().untilAsserted(() -> assertThat(wm.getPm().isAllowedMoreRecords(topicPartition)).isTrue());
             }
 
