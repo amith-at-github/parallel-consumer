@@ -859,7 +859,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         final Duration timeToBlockFor = getTimeToBlockFor();
 
-        if (!timeToBlockFor.isZero()) {
+        if (timeToBlockFor.toMillis() > 0) {
             if (log.isDebugEnabled()) {
                 log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
                         timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
@@ -938,7 +938,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
 
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
-        if (wm.isWorkInFlightMeetingTarget()) {
+        if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
             var lowestScheduledOpt = wm.getLowestRetryTime();
             if (lowestScheduledOpt.isPresent()) {
@@ -946,7 +946,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 Duration retryDelay = options.getDefaultMessageRetryDelay();
                 // at min block for the retry time - retry time is not exact
                 Duration lowestScheduled = lowestScheduledOpt.get();
-                return lowestScheduled.toMillis() < retryDelay.toMillis() ? retryDelay : lowestScheduled;
+                Duration timeBetweenCommits = getTimeBetweenCommits();
+                Duration effectiveRetryDelay = lowestScheduled.toMillis() < retryDelay.toMillis() ? retryDelay : lowestScheduled;
+                return timeBetweenCommits.toMillis() < effectiveRetryDelay.toMillis() ? timeBetweenCommits : effectiveRetryDelay;
             }
         }
 

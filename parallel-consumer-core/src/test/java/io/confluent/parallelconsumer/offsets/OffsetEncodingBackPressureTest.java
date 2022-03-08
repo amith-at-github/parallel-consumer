@@ -65,7 +65,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         final int numberOfRecords = 1_00;
         // todo delete
 //        parallelConsumer.setLongPollTimeout(ofMillis(200));
-//        parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
+        parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
         // todo - very smelly - store for restoring
         var realMax = OffsetMapCodecManager.DefaultMaxMetadataSize;
