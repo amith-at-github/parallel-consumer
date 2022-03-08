@@ -525,7 +525,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         return shard.getWorkContainerForRecord(rec);
     }
 
-    public Duration getLowestRetryTime() {
+    public Optional<Duration> getLowestRetryTime() {
         return sm.getLowestRetryTime();
     }
 

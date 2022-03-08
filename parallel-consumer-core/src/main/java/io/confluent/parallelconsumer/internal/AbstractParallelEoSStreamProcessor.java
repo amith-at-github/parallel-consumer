@@ -906,6 +906,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ParallelConsumerOptions#getTargetRecordsOutForProcessing()
      */
     private Duration getTimeToBlockFor() {
+        // todo cleanup
         // old
 
         //        // if paused, we won't be doing any work
@@ -933,17 +934,23 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         // broker poller will interrupt the control thread, if it has records to offer while the system is starving for new work
 //        Duration effectiveCommitAttemptDelay = isShouldCheckCommitNow() ? Duration.ofMillis(0) : getTimeToNextCommitCheck();
 
+
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
 
-        // though check if we have work awaiting retry
-        var lowestScheduled = wm.getLowestRetryTime();
-        Duration retryDelay = options.getDefaultMessageRetryDelay();
-        // at min block for the retry time - retry time is not exact
-        lowestScheduled = lowestScheduled.toSeconds() < retryDelay.toSeconds() ? retryDelay : lowestScheduled;
+        // if starved for work, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and retry the failed work
+        if (wm.isStarvedForNewWork()) {
+            // though check if we have work awaiting retry
+            var lowestScheduledOpt = wm.getLowestRetryTime();
+            if (lowestScheduledOpt.isPresent()) {
+                // todo can sleep for less than this time? is this lower bound required? given that if we're starved - the failed work will most likely be selected? And even if not selected - then we will no longer be starved.
+                Duration retryDelay = options.getDefaultMessageRetryDelay();
+                // at min block for the retry time - retry time is not exact
+                Duration lowestScheduled = lowestScheduledOpt.get();
+                return lowestScheduled.toMillis() < retryDelay.toMillis() ? retryDelay : lowestScheduled;
+            }
+        }
 
-        boolean commitDelayIsLower = effectiveCommitAttemptDelay.compareTo(lowestScheduled) < 0;
-
-        return commitDelayIsLower ? effectiveCommitAttemptDelay : lowestScheduled;
+        return effectiveCommitAttemptDelay;
     }
 
     /**

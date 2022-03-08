@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import static io.confluent.parallelconsumer.ParallelConsumerOptions.ProcessingOrder.KEY;
+import static java.util.Optional.of;
 
 /**
  * Shards are local queues of work to be processed.
@@ -177,7 +178,10 @@ public class ShardManager<K, V> {
         log.debug("Work FAILED");
     }
 
-    public Duration getLowestRetryTime() {
+    /**
+     * @return none if there are no messages to retry
+     */
+    public Optional<Duration> getLowestRetryTime() {
         // todo replace with cache with using a Priority Queue
         long retryDelayMs = processingShards.values().parallelStream()
                 .mapToLong(x ->
@@ -191,7 +195,7 @@ public class ShardManager<K, V> {
                                 .orElse(Long.MAX_VALUE))
                 .min()
                 .orElse(Long.MAX_VALUE);
-        return Duration.ofMillis(retryDelayMs);
+        return of(Duration.ofMillis(retryDelayMs));
     }
 
 }
