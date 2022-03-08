@@ -46,13 +46,12 @@
     <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.internal" level="debug"/>-->
-    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="trace"/>
+    <!--    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="trace"/>-->
 
 
     <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="trace"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.state.RemovedPartitionState" level="trace"/>-->
 
-    <logger name="org.apache.kafka.common.config.AbstractConfig" level="error"/>
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
@@ -90,6 +89,8 @@
     <!--    <logger name="org.apache.kafka.clients" level="warn"/>-->
     <!--    <logger name="org.apache.kafka.clients" level="debug"/>-->
 
+    <!-- Kafka External -->
+    <logger name="org.apache.kafka.common.config.AbstractConfig" level="error"/>
 
     <!-- external -->
     <logger name="org.postgresql" level="info"/>

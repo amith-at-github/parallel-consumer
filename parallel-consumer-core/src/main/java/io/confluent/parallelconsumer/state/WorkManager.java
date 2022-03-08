@@ -475,7 +475,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     /**
      * @return Work count in mailbox plus work added to the processing shards
      */
-    public long getTotalWorkAwaitingProcessing() {
+    public long getTotalWorkAwaitingIngestion() {
         long workQueuedInShardsCount = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
         Integer workQueuedInMailboxCount = getAmountOfWorkQueuedWaitingIngestion();
         return workQueuedInShardsCount + workQueuedInMailboxCount;
@@ -538,7 +538,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * concurrency target)
      */
     public boolean isStarvedForNewWork() {
-        long queued = getTotalWorkAwaitingProcessing();
-        return queued > options.getTargetRecordsOutForProcessing();
+        long queued = getTotalWorkAwaitingIngestion();
+        return queued < options.getTargetRecordsOutForProcessing();
     }
 }

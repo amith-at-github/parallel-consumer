@@ -26,7 +26,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
  */
 @Timeout(value = 1, unit = MINUTES)
 @Slf4j
-public class BatchTest extends ParallelEoSStreamProcessorTestBase implements BatchTestBase {
+public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements BatchTestBase {
 
     BatchTestMethods<Void> batchTestMethods;
 

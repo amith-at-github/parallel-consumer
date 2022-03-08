@@ -3,6 +3,8 @@ package io.confluent.csid.utils;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
+import io.confluent.parallelconsumer.AbstractParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import io.confluent.parallelconsumer.state.WorkManager;
@@ -52,7 +54,7 @@ public class KafkaTestUtils {
 
     /**
      * It's a race to see if the genesis offset gets committed or not. So lets remove it if it exists, and all tests can
-     * assume it doesnt.
+     * assume it doesn't.
      */
     public static List<Integer> trimAllGeneisOffset(final List<Integer> collect) {
         while (!collect.isEmpty() && collect.get(0) == 0) {
@@ -78,8 +80,12 @@ public class KafkaTestUtils {
     }
 
     /**
-     * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager})
+     * Collects into a set - ignore repeated commits ({@link OffsetMapCodecManager}).
+     * <p>
+     * Like {@link AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)} but for a {@link
+     * MockProducer}.
      *
+     * @see AbstractParallelEoSStreamProcessorTestBase#assertCommits(List, Optional)
      * @see OffsetMapCodecManager
      */
     public void assertCommits(MockProducer mp, List<Integer> expectedOffsets, Optional<String> description) {
@@ -95,8 +101,11 @@ public class KafkaTestUtils {
                 int offset = (int) commit.offset();
                 results.add(offset);
             }
-            List<Integer> integers = KafkaTestUtils.trimAllGeneisOffset(results);
-            return integers.stream();
+            if (expectedOffsets.contains(0)) {
+                return results.stream();
+            } else {
+                return KafkaTestUtils.trimAllGeneisOffset(results).stream();
+            }
         }).collect(Collectors.toList()); // set - ignore repeated commits ({@link OffsetMap})
 
         assertThat(set).describedAs(description.orElse("Which offsets are committed and in the expected order"))

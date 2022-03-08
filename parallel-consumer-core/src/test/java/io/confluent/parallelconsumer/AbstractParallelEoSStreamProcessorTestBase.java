@@ -301,22 +301,36 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
         waitAtMost(defaultTimeout.multipliedBy(100)).until(() -> loopCount.get() > waitForCount);
     }
 
-    // todo rename to await to match awaitility
-    protected void awaitForCommitExact(int offset) {
+    protected void awaitForCommit(int offset) {
         log.debug("Waiting for commit offset {}", offset);
         await().timeout(defaultTimeout)
+                .untilAsserted(() -> assertCommitsContains(of(offset)));
+    }
+
+    protected void awaitForCommitExact(int offset) {
+        log.debug("Waiting for EXACTLY commit offset {}", offset);
+        await().timeout(defaultTimeout)
+                .failFast(msg("Commit was not exact - contained offsets that weren't {}", offset), () -> {
+                    List<Integer> offsets = extractAllPartitionsOffsetsSequentially();
+                    return offsets.size() > 1 && !offsets.contains(offset);
+                })
                 .untilAsserted(() -> assertCommits(of(offset)));
     }
 
-
     protected void awaitForCommitExact(int partition, int offset) {
-        log.debug("Waiting for commit offset {} on partition {}", offset, partition);
+        log.debug("Waiting for EXACTLY commit offset {} on partition {}", offset, partition);
         var expectedOffset = new OffsetAndMetadata(offset, "");
         TopicPartition partitionNumber = new TopicPartition(INPUT_TOPIC, partition);
         var expectedOffsetMap = UniMaps.of(partitionNumber, expectedOffset);
-        verify(producerSpy, timeout(defaultTimeoutMs).times(1)).sendOffsetsToTransaction(argThat(
-                        (offsetMap) -> offsetMap.equals(expectedOffsetMap)),
-                any(ConsumerGroupMetadata.class));
+        verify(producerSpy, timeout(defaultTimeoutMs)
+                .times(1))
+                .sendOffsetsToTransaction(
+                        argThat((offsetMap) -> offsetMap.equals(expectedOffsetMap)),
+                        any(ConsumerGroupMetadata.class));
+    }
+
+    public void assertCommitsContains(List<Integer> offsets) {
+        assertThat(extractAllPartitionsOffsetsSequentially()).containsAll(offsets);
     }
 
     public void assertCommits(List<Integer> offsets, String description) {
@@ -324,7 +338,8 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     /**
-     * Flattens the offsets of all partitions into a single sequential list
+     * Flattens the offsets of all partitions into a single sequential list. Removing the genesis commit (0) if it
+     * exists, unless it's contained in the assertion.
      */
     public void assertCommits(List<Integer> offsets, Optional<String> description) {
         if (isUsingTransactionalProducer()) {
@@ -332,7 +347,9 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
             assertThat(extractAllPartitionsOffsetsSequentially()).isEmpty();
         } else {
             List<Integer> collect = extractAllPartitionsOffsetsSequentially();
-            collect = trimAllGeneisOffset(collect);
+            if (!offsets.contains(0)) {
+                collect = trimAllGeneisOffset(collect);
+            }
             // duplicates are ok
             // is there a nicer optional way?
             // {@link Optional#ifPresentOrElse} only @since 9
@@ -354,14 +371,13 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
      * Flattens the offsets of all partitions into a single sequential list
      */
     protected List<Integer> extractAllPartitionsOffsetsSequentially() {
-        var result = new ArrayList<Integer>();
         // copy the list for safe concurrent access
         List<Map<TopicPartition, OffsetAndMetadata>> history = new ArrayList<>(consumerSpy.getCommitHistoryInt());
         return history.stream()
                 .flatMap(commits ->
                         {
-                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values());
-                            return values.stream().map(meta -> (int) meta.offset());
+                            Collection<OffsetAndMetadata> values = new ArrayList<>(commits.values()); // 4 debugging
+                            return values.stream().map(meta -> (int) meta.offset()); // int cast a luxury in test context - no big offsets
                         }
                 ).collect(Collectors.toList());
     }

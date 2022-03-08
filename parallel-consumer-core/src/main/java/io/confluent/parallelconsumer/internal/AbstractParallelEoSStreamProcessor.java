@@ -656,7 +656,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // end of loop
         log.trace("End of control loop, waiting processing {}, remaining in partition queues: {}, out for processing: {}. In state: {}",
-                wm.getTotalWorkAwaitingProcessing(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
+                wm.getTotalWorkAwaitingIngestion(), wm.getNumberOfEntriesInPartitionQueues(), wm.getNumberRecordsOutForProcessing(), state);
     }
 
     private <R> int handleWork(final Function<List<ConsumerRecord<K, V>>, List<R>> userFunction, final Consumer<R> callback) {
@@ -860,11 +860,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         final Duration timeToBlockFor = getTimeToBlockFor();
 
         if (timeToBlockFor.toMillis() > 0) {
+            currentlyPollingWorkCompleteMailBox.getAndSet(true);
             if (log.isDebugEnabled()) {
                 log.debug("Blocking poll on work until next scheduled offset commit attempt for {}. active threads: {}, queue: {}",
                         timeToBlockFor, workerThreadPool.getActiveCount(), getNumberOfUserFunctionsQueued());
             }
-            currentlyPollingWorkCompleteMailBox.getAndSet(true);
             // wait for work, with a timeToBlockFor for sanity
             log.trace("Blocking poll {}", timeToBlockFor);
             try {
@@ -902,7 +902,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      *
      * @return either the duration until next commit, or next work retry
      * @see WorkManager#isStarvedForNewWork()
-     * @see WorkManager#getTotalWorkAwaitingProcessing()
+     * @see WorkManager#getTotalWorkAwaitingIngestion()
      * @see ParallelConsumerOptions#getTargetRecordsOutForProcessing()
      */
     private Duration getTimeToBlockFor() {
@@ -927,6 +927,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             // should not block as not enough work is being done, and there's more work to ingest
             boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
             if (ingestionWorkAndStarved) {
+                log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
                 return Duration.ofMillis(0);
             }
         }
@@ -935,7 +936,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 //        Duration effectiveCommitAttemptDelay = isShouldCheckCommitNow() ? Duration.ofMillis(0) : getTimeToNextCommitCheck();
 
 
-        Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
 
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
         if (!wm.isWorkInFlightMeetingTarget()) {
@@ -948,10 +948,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 Duration lowestScheduled = lowestScheduledOpt.get();
                 Duration timeBetweenCommits = getTimeBetweenCommits();
                 Duration effectiveRetryDelay = lowestScheduled.toMillis() < retryDelay.toMillis() ? retryDelay : lowestScheduled;
-                return timeBetweenCommits.toMillis() < effectiveRetryDelay.toMillis() ? timeBetweenCommits : effectiveRetryDelay;
+                Duration result = timeBetweenCommits.toMillis() < effectiveRetryDelay.toMillis() ? timeBetweenCommits : effectiveRetryDelay;
+                log.debug("Not enough work in flight, while work is waiting to be retried - so will only sleep until next retry time of {}", result);
+                return result;
             }
         }
 
+        Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
+        log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
     }
 
@@ -1197,6 +1201,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         synchronized (commitCommand) {
             this.commitCommand.set(true);
         }
+        notifySomethingToDo();
     }
 
     private boolean isCommandedToCommit() {

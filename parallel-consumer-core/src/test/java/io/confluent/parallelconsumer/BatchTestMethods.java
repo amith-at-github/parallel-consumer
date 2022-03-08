@@ -98,7 +98,8 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         double acceptableAttainedBatchSize = targetBatchSize * targetMetThreshold;
         assertThat(averageBatchSize).isGreaterThan(acceptableAttainedBatchSize);
 
-        baseTest.awaitForCommitExact(numRecsExpected);
+        baseTest.parentParallelConsumer.requestCommitAsap();
+        baseTest.awaitForCommit(numRecsExpected);
     }
 
     /**
@@ -170,7 +171,8 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
         assertThat(getPC().isClosedOrFailed()).isFalse();
 
-        baseTest.awaitForCommitExact(numRecsExpected);
+        getPC().closeDrainFirst();
+        baseTest.awaitForCommit(numRecsExpected);
     }
 
     public abstract void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received);
@@ -191,7 +193,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         //
         int expectedNumOfBatches = (int) Math.ceil(expectedNumOfMessages / (double) batchSize);
 
-        baseTest.awaitForCommitExact(expectedNumOfMessages);
+        baseTest.awaitForCommit(expectedNumOfMessages);
 
         // due to the failure, might get one extra batch
         assertThat(receivedBatches).hasSizeGreaterThanOrEqualTo(expectedNumOfBatches);

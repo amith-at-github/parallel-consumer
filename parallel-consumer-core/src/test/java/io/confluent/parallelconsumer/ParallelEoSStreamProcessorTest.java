@@ -87,7 +87,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
      */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
-    @SneakyThrows
     void offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode commitMode) {
         var options = getBaseOptions(commitMode).toBuilder()
                 .ordering(UNORDERED)
@@ -107,6 +106,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         // finish processing only msg 1
         parallelConsumer.poll((ignore) -> {
+            log.error("msg: {}", ignore);
             startBarrierLatch.countDown();
             int offset = (int) ignore.offset();
             LatchTestUtils.awaitLatch(locks, offset);
@@ -117,24 +117,30 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         awaitLatch(startBarrierLatch);
 
         // zero records waiting, 2 out for processing
-        assertThat(parallelConsumer.getWm().getTotalWorkAwaitingProcessing()).isZero();
+        assertThat(parallelConsumer.getWm().getTotalWorkAwaitingIngestion()).isZero();
         assertThat(parallelConsumer.getWm().getNumberRecordsOutForProcessing()).isEqualTo(2);
 
         // finish processing 1
         releaseAndWait(locks, 1);
 
+        // make sure offset 0 is committed (next expected), while the rest are not
         parallelConsumer.requestCommitAsap();
+        awaitForCommitExact(0);
 
         // make sure no offsets are committed
         assertCommits(of(), "Partition is blocked");
 
-        // So it's data is setup can be used in other tests, finish 0
+        // test complete
+
+        // So it's data is setup can be used in other tests, finish offset 0 as well
         releaseAndWait(locks, 0);
 
         parallelConsumer.requestCommitAsap();
 
+        awaitForCommitExact(2);
+
         log.debug("Closing...");
-        parallelConsumer.close();
+        parallelConsumer.closeDrainFirst();
 
         assertThat(processedStates)
                 .as("sanity - all expected messages are processed")
@@ -158,8 +164,6 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     /**
      * {@link #offsetsAreNeverCommittedForMessagesStillInFlightSimplest(CommitMode)} doesn't check the final offsets -
      * that's what this test does.
-     *
-     * @param commitMode
      */
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
