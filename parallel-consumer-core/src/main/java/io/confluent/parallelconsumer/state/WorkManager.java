@@ -352,12 +352,12 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     public void onSuccess(WorkContainer<K, V> wc) {
         log.trace("Work success ({}), removing from processing shard queue", wc);
         pm.setDirty();
-        ConsumerRecord<K, V> cr = wc.getCr();
+
         wc.succeed();
 
         // update as we go
         pm.onSuccess(wc);
-        sm.onSuccess(cr);
+        sm.onSuccess(wc);
 
         // notify listeners
         successfulWorkListeners.forEach(c -> c.accept(wc));
@@ -454,6 +454,10 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     public boolean hasWorkInFlight() {
         return getNumberRecordsOutForProcessing() != 0;
+    }
+
+    public boolean isWorkInFlightMeetingTarget() {
+        return getNumberRecordsOutForProcessing() >= options.getTargetRecordsOutForProcessing();
     }
 
     public boolean isClean() {

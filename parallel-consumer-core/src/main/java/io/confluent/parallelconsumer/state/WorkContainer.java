@@ -113,10 +113,16 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
         return negative;
     }
 
+    /**
+     * @return time until it should be retried
+     */
     public Duration getDelayUntilRetryDue() {
         return getDelayUntilRetryDue(normalClock);
     }
 
+    /**
+     * @return time until it should be retried
+     */
     public Duration getDelayUntilRetryDue(WallClock clock) {
         Instant now = clock.getNow();
         Temporal nextAttemptAt = tryAgainAt(clock);

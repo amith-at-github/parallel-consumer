@@ -937,8 +937,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
 
-        // if starved for work, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and retry the failed work
-        if (wm.isStarvedForNewWork()) {
+        // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
+        if (wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
             var lowestScheduledOpt = wm.getLowestRetryTime();
             if (lowestScheduledOpt.isPresent()) {
