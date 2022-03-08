@@ -42,7 +42,7 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
     }
 
     @Override
-    protected void checkPressure() {
+    protected void checkPipelinePressure() {
         // no-op - as calculateQuantityToRequest does not use a pressure system, unlike the core module
     }
 

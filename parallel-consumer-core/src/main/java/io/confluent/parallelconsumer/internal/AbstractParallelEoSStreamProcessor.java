@@ -661,7 +661,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
     private <R> int handleWork(final Function<List<ConsumerRecord<K, V>>, List<R>> userFunction, final Consumer<R> callback) {
         // check queue pressure first before addressing it
-        checkPressure();
+        checkPipelinePressure();
 
         int gotWorkCount = 0;
 
@@ -681,7 +681,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         queueStatsLimiter.performIfNotLimited(() -> {
             int queueSize = getNumberOfUserFunctionsQueued();
             log.debug("Stats: \n- pool active: {} queued:{} \n- queue size: {} target: {} loading factor: {}",
-                    workerThreadPool.getActiveCount(), queueSize, queueSize, getPoolConcurrencyTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+                    workerThreadPool.getActiveCount(), queueSize, queueSize, getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
         });
 
         return gotWorkCount;
@@ -778,14 +778,15 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private int getQueueTargetLoaded() {
+        //noinspection unchecked
         int batch = (int) options.getBatchSize().orElse(1);
-        return getPoolConcurrencyTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
+        return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;
     }
 
     /**
-     * Checks the system has enough pressure, if not attempts to step up the load factor.
+     * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
      */
-    protected void checkPressure() {
+    protected void checkPipelinePressure() {
         boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getAmountOfWorkQueuedWaitingIngestion() > options.getTargetRecordsOutForProcessing();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
@@ -803,7 +804,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             boolean steppedUp = dynamicExtraLoadFactor.maybeStepUp();
             if (steppedUp) {
                 log.debug("isPoolQueueLow(): Executor pool queue is not loaded with enough work (queue: {} vs target: {}), stepped up loading factor to {}",
-                        getNumberOfUserFunctionsQueued(), getPoolConcurrencyTarget(), dynamicExtraLoadFactor.getCurrentFactor());
+                        getNumberOfUserFunctionsQueued(), getPoolLoadTarget(), dynamicExtraLoadFactor.getCurrentFactor());
             } else if (dynamicExtraLoadFactor.isMaxReached()) {
                 log.warn("isPoolQueueLow(): Max loading factor steps reached: {}/{}", dynamicExtraLoadFactor.getCurrentFactor(), dynamicExtraLoadFactor.getMaxFactor());
             }
@@ -813,13 +814,13 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     /**
      * @return aim to never have the pool queue drop below this
      */
-    private int getPoolConcurrencyTarget() {
+    private int getPoolLoadTarget() {
         return options.getTargetRecordsOutForProcessing();
     }
 
     private boolean isPoolQueueLow() {
         int queueSize = getNumberOfUserFunctionsQueued();
-        int queueTarget = getPoolConcurrencyTarget();
+        int queueTarget = getPoolLoadTarget();
         boolean workAmountBelowTarget = queueSize <= queueTarget;
         boolean hasWorkInMailboxes = wm.hasWorkAwaitingIngestionToShards();
         log.debug("isPoolQueueLow()? workAmountBelowTarget {} {} vs {} && wm.hasWorkInMailboxes() {};",
@@ -931,6 +932,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
 
         // broker poller will interrupt the control thread, if it has records to offer while the system is starving for new work
 //        Duration effectiveCommitAttemptDelay = isShouldCheckCommitNow() ? Duration.ofMillis(0) : getTimeToNextCommitCheck();
+
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
 
         // though check if we have work awaiting retry
