@@ -46,7 +46,7 @@
 
     <!-- Broker polling -->
     <!--        <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
-    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>
+    <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="trace"/>-->
     <!--            <logger name="io.confluent.parallelconsumer.internal" level="debug"/>-->
     <!--        <logger name="io.confluent.parallelconsumer.state.WorkManager" level="trace"/>-->
 
