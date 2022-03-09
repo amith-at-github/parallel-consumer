@@ -17,6 +17,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -149,7 +150,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         setupParallelConsumer(batchSizeSetting, ParallelConsumerOptions.DEFAULT_MAX_CONCURRENCY, order);
 
         var recs = getKtu().sendRecords(numRecsExpected);
-        List<List<ConsumerRecord<String, String>>> batchesReceived = Collections.synchronizedList(new ArrayList<>());
+        List<List<ConsumerRecord<String, String>>> batchesReceived = new CopyOnWriteArrayList<>();
 
         //
         simpleBatchTestPoll(batchesReceived);
