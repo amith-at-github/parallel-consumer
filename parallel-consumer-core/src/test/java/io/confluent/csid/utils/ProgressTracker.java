@@ -39,11 +39,11 @@ public class ProgressTracker {
 
     private Integer roundsAllowed = 10;
 
-    private int coldRoundsAllowed = 20;
+    private final int coldRoundsAllowed = 20;
 
     @Getter
     private int highestRoundCountSeen = 0;
-    private Instant startTime = Instant.now();
+    private final Instant startTime = Instant.now();
 
     public ProgressTracker(final AtomicInteger processedCount, Integer roundsAllowed, Duration timeout) {
         this.processedCount = processedCount;
