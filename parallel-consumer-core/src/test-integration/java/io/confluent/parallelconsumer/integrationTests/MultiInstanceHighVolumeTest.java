@@ -1,7 +1,7 @@
 package io.confluent.parallelconsumer.integrationTests;
 
 /*-
- * Copyright (C) 2020-2021 Confluent, Inc.
+ * Copyright (C) 2020-2022 Confluent, Inc.
  */
 
 import io.confluent.csid.utils.ProgressBarUtils;
@@ -35,6 +35,7 @@ import static org.assertj.core.util.Lists.list;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
+//@Isolated // performance sensitive
 @Slf4j
 class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> {
 
@@ -163,6 +164,7 @@ class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> 
                 .maxConcurrency(100)
                 .build());
         pc.subscribe(of(inputName));
+        pc.setTimeBetweenCommits(ofSeconds(1));
 
         // sanity
         return pc;
