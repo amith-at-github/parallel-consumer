@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.confluent.csid.utils.LatchTestUtils.awaitLatch;
+import static java.time.Duration.ofSeconds;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -137,8 +138,7 @@ class VertxTest extends VertxBaseUnitTest {
 
     @Test
     void testHttpMinimal() {
-        var latch = new CountDownLatch(1);
-        vertxAsync.addVertxOnCompleteHook(latch::countDown);
+        vertxAsync.setTimeBetweenCommits(ofSeconds(1));
 
         var futureStream =
                 vertxAsync.vertxHttpReqInfoStream((rec) -> {
@@ -150,18 +150,12 @@ class VertxTest extends VertxBaseUnitTest {
                     return goodHost;
                 });
 
-        // wait
-        awaitLatch(latch);
-
         //
-        awaitForOneLoopCycle();
+        awaitForCommitExact(1);
 
         // verify
-        var res = getResults(futureStream);
-
-        ktu.assertCommits(producerSpy, of(1));
-
         // test results are successes
+        var res = getResults(futureStream);
         assertThat(res).extracting(x -> x.result().statusCode()).containsOnly(200);
         assertThat(res).extracting(x -> x.result().bodyAsString()).contains(WireMockUtils.stubResponse);
     }
