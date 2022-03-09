@@ -304,8 +304,11 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         log.debug("Partitions revoked {}, state: {}", partitions, state);
         numberOfAssignedPartitions = numberOfAssignedPartitions - partitions.size();
         try {
-            commitOffsetsThatAreReady();
             wm.onPartitionsRevoked(partitions);
+
+            // can't commit for partitions already revoked, but use opportunity as a save point
+            commitOffsetsThatAreReady();
+
             usersConsumerRebalanceListener.ifPresent(x -> x.onPartitionsRevoked(partitions));
         } catch (Exception e) {
             throw new InternalRuntimeError("onPartitionsRevoked event error", e);
@@ -393,7 +396,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                     transitionToDraining();
                 }
                 case DONT_DRAIN -> {
-                    log.info("Not waiting for in flight to complete, will transition directly to closing");
+                    log.info("Not waiting for remaining queued to complete, will finish in flight, then close...");
                     transitionToClosing();
                 }
             }
@@ -433,15 +436,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
     private void doClose(Duration timeout) throws TimeoutException, ExecutionException {
-        log.debug("Doing closing state: {}...", state);
-
-        // only close consumer once producer has committed it's offsets (tx'l)
-        log.debug("Closing and waiting for broker poll system...");
-        brokerPollSubsystem.closeAndWait();
-
-        maybeCloseConsumer();
-
-        producerManager.ifPresent(x -> x.close(timeout));
+        log.debug("Starting close process (state: {})...", state);
 
         log.debug("Shutting down execution pool...");
         List<Runnable> unfinished = workerThreadPool.shutdownNow();
@@ -449,7 +444,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             log.warn("Threads not done count: {}", unfinished.size());
         }
 
-        log.trace("Awaiting worker pool termination...");
+        log.debug("Awaiting worker pool termination...");
         boolean interrupted = true;
         while (interrupted) {
             log.debug("Still interrupted");
@@ -466,6 +461,20 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 interrupted = true;
             }
         }
+        log.debug("Worker pool terminated.");
+
+        // last check to see if after worker pool closed, has any new work arrived?
+        processWorkCompleteMailBox();
+
+        commitOffsetsThatAreReady();
+
+        // only close consumer once producer has committed it's offsets (tx'l)
+        log.debug("Closing and waiting for broker poll system...");
+        brokerPollSubsystem.closeAndWait();
+
+        maybeCloseConsumer();
+
+        producerManager.ifPresent(x -> x.close(timeout));
 
         log.debug("Close complete.");
         this.state = closed;

@@ -22,9 +22,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.*;
 
+import static io.confluent.csid.utils.StringUtils.msg;
 import static io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor.MDC_INSTANCE_ID;
-import static io.confluent.parallelconsumer.internal.State.closed;
-import static io.confluent.parallelconsumer.internal.State.running;
+import static io.confluent.parallelconsumer.internal.State.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -108,7 +108,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         try {
             while (state != closed) {
                 log.trace("Loop: Broker poller: ({})", state);
-                if (state == running) {
+                if (state == running || state == draining) { // if draining - subs will be paused, so use this to just sleep
                     ConsumerRecords<K, V> polledRecords = pollBrokerForRecords();
                     log.debug("Got {} records in poll result", polledRecords.count());
 
@@ -129,14 +129,13 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                 switch (state) {
                     case draining -> {
                         doPause();
-                        transitionToCloseMaybe();
                     }
                     case closing -> {
                         doClose();
                     }
                 }
             }
-            log.debug("Broker poll thread finished, returning true to future");
+            log.debug("Broker poller thread finished normally, returning OK (true) to future...");
             return true;
         } catch (Exception e) {
             log.error("Unknown error", e);
@@ -144,24 +143,10 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         }
     }
 
-    private void transitionToCloseMaybe() {
-        // make sure everything is committed
-        if (isResponsibleForCommits() && !wm.isRecordsAwaitingToBeCommitted()) {
-            // transition to closing
-            state = State.closing;
-        } else {
-            log.trace("Draining, but work still needs to be committed. Yielding thread to avoid busy wait.");
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     private void doClose() {
+        log.debug("Doing close...");
         doPause();
-        maybeCloseConsumer();
+        maybeCloseConsumerManager();
         state = closed;
     }
 
@@ -169,7 +154,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
      * To keep things simple, make sure the correct thread which can make a commit, is the one to close the consumer.
      * This way, if partitions are revoked, the commit can be made inline.
      */
-    private void maybeCloseConsumer() {
+    private void maybeCloseConsumerManager() {
         if (isResponsibleForCommits()) {
             log.debug("Closing {}, first closing consumer...", this.getClass().getSimpleName());
             this.consumerManager.close(DrainingCloseable.DEFAULT_TIMEOUT);
@@ -185,7 +170,8 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         managePauseOfSubscription();
         log.debug("Subscriptions are paused: {}", paused);
 
-        Duration thisLongPollTimeout = state == running ? BrokerPollSystem.longPollTimeout
+        boolean pollTimeoutNormally = state == running || state == draining;
+        Duration thisLongPollTimeout = pollTimeoutNormally ? BrokerPollSystem.longPollTimeout
                 : Duration.ofMillis(1); // Can't use Duration.ZERO - this causes Object#wait to wait forever
 
         log.debug("Long polling broker with timeout {}, might appear to sleep here if subs are paused, or no data available on broker.", thisLongPollTimeout);
@@ -208,17 +194,14 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
 
     private final RateLimiter pauseLimiter = new RateLimiter(1);
 
-    private void doPause() {
+    private void doPauseMaybe() {
         // idempotent
         if (paused) {
             log.trace("Already paused");
         } else {
             if (pauseLimiter.couldPerform()) {
                 pauseLimiter.performIfNotLimited(() -> {
-                    paused = true;
-                    log.debug("Pausing subs");
-                    Set<TopicPartition> assignment = consumerManager.assignment();
-                    consumerManager.pause(assignment);
+                    doPause();
                 });
             } else {
                 if (log.isDebugEnabled()) {
@@ -228,6 +211,17 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
                             wm.getAmountOfWorkQueuedWaitingIngestion());
                 }
             }
+        }
+    }
+
+    private void doPause() {
+        if (!paused) {
+            paused = true;
+            log.debug("Pausing subs");
+            Set<TopicPartition> assignment = consumerManager.assignment();
+            consumerManager.pause(assignment);
+        } else {
+            log.debug("Already paused, skipping");
         }
     }
 
@@ -270,7 +264,7 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
         boolean throttle = shouldThrottle();
         log.trace("Need to throttle: {}", throttle);
         if (throttle) {
-            doPause();
+            doPauseMaybe();
         } else {
             resumeIfPaused();
         }
@@ -303,12 +297,16 @@ public class BrokerPollSystem<K, V> implements OffsetCommitter {
     @SneakyThrows
     @Override
     public void retrieveOffsetsAndCommit() {
-        // {@link Optional#ifPresentOrElse} only @since 9
-        ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
-            // shouldn't be here
-            throw new IllegalStateException("No committer configured");
-        });
-        committer.commit();
+        if (state == running || state == draining || state == closing) {
+            // {@link Optional#ifPresentOrElse} only @since 9
+            ConsumerOffsetCommitter<K, V> committer = this.committer.orElseThrow(() -> {
+                // shouldn't be here
+                throw new IllegalStateException("No committer configured");
+            });
+            committer.commit();
+        } else {
+            throw new IllegalStateException(msg("Can't commit - not running (state: {}", state));
+        }
     }
 
     /**

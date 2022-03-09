@@ -92,6 +92,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
                 .ordering(UNORDERED)
                 .build();
         setupParallelConsumerInstance(options);
+        parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
         primeFirstRecord();
         sendSecondRecord(consumerSpy);
@@ -382,7 +383,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     @ParameterizedTest()
     @EnumSource(CommitMode.class)
     @SneakyThrows
-    public void testVoid(CommitMode commitMode) {
+    public void testVoidPollMethod(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
         int expected = 1;
@@ -394,7 +395,7 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
 
         awaitLatch(msgCompleteBarrier);
 
-        awaitForSomeLoopCycles(1);
+        awaitForOneLoopCycle();
 
         parallelConsumer.close();
 
@@ -695,6 +696,8 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
     public void closeAfterSingleMessageShouldBeEventBasedFast(CommitMode commitMode) {
         setupParallelConsumerInstance(commitMode);
 
+        Duration timeBetweenCommits = parallelConsumer.getTimeBetweenCommits();
+
         var msgCompleteBarrier = new CountDownLatch(1);
 
         parallelConsumer.poll((ignore) -> {
@@ -720,8 +723,9 @@ public class ParallelEoSStreamProcessorTest extends ParallelEoSStreamProcessorTe
         });
 
         //
-        assertThat(time).as("Should not be blocked for any reason")
-                .isLessThan(ofSeconds(1));
+        Duration other = commitMode == PERIODIC_CONSUMER_SYNC ? timeBetweenCommits : ofSeconds(1);
+        assertThat(time).as("Should not be fast")
+                .isLessThan(other);
     }
 
     @ParameterizedTest()
