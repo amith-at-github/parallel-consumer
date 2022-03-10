@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static io.confluent.csid.utils.StringUtils.msg;
+import static io.confluent.parallelconsumer.internal.Documentation.getLinkHtmlToDocSection;
 import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 
 @Slf4j
@@ -56,7 +58,7 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
 
     private void validateNonBatch() {
         if (options.getBatchSize().isPresent()) {
-            throw new IllegalArgumentException("A 'batch size' has been specified in `options`, so you must use the `batch` versions of the polling methods. See ");
+            throw new IllegalArgumentException(msg("A 'batch size' has been specified in `options`, so you must use the `batch` versions of the polling methods. See {}", getLinkHtmlToDocSection("#batching")));
         }
     }
 

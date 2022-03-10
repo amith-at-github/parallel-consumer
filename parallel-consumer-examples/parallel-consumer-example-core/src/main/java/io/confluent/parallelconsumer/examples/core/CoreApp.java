@@ -207,7 +207,7 @@ public class CoreApp {
             // process the entire batch payload at once
             processBatchPayload(payload);
         });
-        // end::circuitBreaker[]
+        // end::batching[]
     }
 
     private void processBatchPayload(List<String> payload) {
