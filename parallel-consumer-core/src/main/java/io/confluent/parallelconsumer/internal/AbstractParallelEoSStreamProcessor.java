@@ -771,14 +771,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return listOfBatches;
     }
 
-
-//    /**
-//     * Pluggable interface for instructing the framework how many work units to attempt to retrieve from the {@link
-//     * WorkManager} for this control loop
-//     *
-//     * @return number of {@link WorkContainer} to try to get
-//     */
-
     /**
      * @return number of {@link WorkContainer} to try to get
      */

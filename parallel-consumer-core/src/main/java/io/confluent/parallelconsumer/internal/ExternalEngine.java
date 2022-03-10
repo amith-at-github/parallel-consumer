@@ -24,24 +24,6 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
         super(newOptions);
     }
 
-//    /**
-//     * @return the number of records to try to get, based on the current count of records outstanding
-//     */
-//    @Override
-//    protected int calculateQuantityToRequest() {
-//        int queueTargetLoaded = getQueueTargetLoaded();
-//        int numberRecordsOutForProcessing = wm.getNumberRecordsOutForProcessing();
-//        int target = getOptions().getTargetAmountOfRecordsInFlight();
-//        int rawDelta = target - numberRecordsOutForProcessing;
-//
-//        //
-//        int delta = Math.max(0, rawDelta);
-//        log.debug(msg("Target: %s. Out currently: %s. Will request extra: %s", target, numberRecordsOutForProcessing, delta));
-//        flog.at(Level.FINE).atMostEvery(1, TimeUnit.SECONDS)
-//                .log("Target: %s. Out currently: %s. Will request extra: %s", target, numberRecordsOutForProcessing, delta);
-//        return delta;
-//    }
-
     @Override
     protected void checkPipelinePressure() {
         // no-op - as calculateQuantityToRequest does not use a pressure system, unlike the core module
