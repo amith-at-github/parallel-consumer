@@ -108,8 +108,8 @@ public abstract class BatchTestMethods<POLL_RETURN> {
      */
     protected abstract void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger);
 
-    protected POLL_RETURN averageBatchSizeTestPollInner(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger, List<ConsumerRecord<String, String>> recordList) {
-        int size = recordList.size();
+    protected POLL_RETURN averageBatchSizeTestPollInner(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter statusLogger, List<ConsumerRecord<String, String>> pollBatch) {
+        int size = pollBatch.size();
 
         statusLogger.performIfNotLimited(() -> {
             try {
@@ -126,7 +126,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
         try {
             log.trace("Batch size {}", size);
-            return averageBatchSizeTestPollStep(recordList);
+            return averageBatchSizeTestPollStep(pollBatch);
         } finally {
             numBatches.getAndIncrement();
             numRecords.addAndGet(size);
@@ -174,27 +174,11 @@ public abstract class BatchTestMethods<POLL_RETURN> {
 
         assertThat(getPC().isClosedOrFailed()).isFalse();
 
-//        await().atMost(defaultTimeout)
-//                .untilAsserted(() -> {
-//                    long numberOfEntriesInPartitionQueues = getPC().getWm().getNumberOfEntriesInPartitionQueues();
-//                    ShardManager sm = getPC().getWm().getSm();
-//                    PartitionMonitor pm = getPC().getWm().getPm();
-//                    long numberOfWorkQueuedInShardsAwaitingSelection = sm.getNumberOfWorkQueuedInShardsAwaitingSelection();
-//                    Set assignment = getKtu().getConsumerSpy().assignment();
-//                    TopicPartition o = (TopicPartition) assignment.stream().findFirst().get();
-//                    PartitionState partitionState = pm.getPartitionState(o);
-//                    Set incompleteOffsets = partitionState.getIncompleteOffsets();
-//
-//                    assertThat(incompleteOffsets).isEmpty();
-//                });
-
-
         baseTest.awaitForCommit(numRecsExpected);
-//        getPC().requestCommitAsap();
         getPC().closeDrainFirst();
     }
 
-    public abstract void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received);
+    public abstract void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> batchesReceived);
 
     @SneakyThrows
     public void batchFailureTest(ParallelConsumerOptions.ProcessingOrder order) {
@@ -212,6 +196,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         //
         int expectedNumOfBatches = (int) Math.ceil(expectedNumOfMessages / (double) batchSize);
 
+        //
         baseTest.awaitForCommit(expectedNumOfMessages);
 
         // due to the failure, might get one extra batch
@@ -231,15 +216,15 @@ public abstract class BatchTestMethods<POLL_RETURN> {
     /**
      * Must call {@link #batchFailPollInner(List)}
      */
-    protected abstract void batchFailPoll(List<List<ConsumerRecord<String, String>>> received);
+    protected abstract void batchFailPoll(List<List<ConsumerRecord<String, String>>> receivedBatches);
 
-    protected POLL_RETURN batchFailPollInner(List<ConsumerRecord<String, String>> received) {
-        List<Long> offsets = received.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
+    protected POLL_RETURN batchFailPollInner(List<ConsumerRecord<String, String>> pollBatch) {
+        List<Long> offsets = pollBatch.stream().map(ConsumerRecord::offset).collect(Collectors.toList());
         log.debug("Got batch {}", offsets);
 
         boolean contains = offsets.contains(FAILURE_TARGET);
         if (contains) {
-            var target = received.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
+            var target = pollBatch.stream().filter(x -> x.offset() == FAILURE_TARGET).findFirst().get();
             var targetWc = getPC().getWm().getWorkContainerFor(target);
             int numberOfFailedAttempts = targetWc.getNumberOfFailedAttempts();
             int targetAttempts = 3;

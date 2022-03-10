@@ -50,8 +50,8 @@ public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements
             @Override
             protected void averageBatchSizeTestPoll(AtomicInteger numBatches, AtomicInteger numRecords, RateLimiter
                     statusLogger) {
-                parallelConsumer.pollBatch(recordList -> {
-                    averageBatchSizeTestPollInner(numBatches, numRecords, statusLogger, recordList);
+                parallelConsumer.pollBatch(pollBatch -> {
+                    averageBatchSizeTestPollInner(numBatches, numRecords, statusLogger, pollBatch);
                 });
             }
 
@@ -61,18 +61,18 @@ public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements
             }
 
             @Override
-            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received) {
+            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> batchesReceived) {
                 parallelConsumer.pollBatch(pollBatch -> {
                     log.debug("Batch of messages: {}", toOffsets(pollBatch));
-                    received.add(pollBatch);
+                    batchesReceived.add(pollBatch);
                 });
             }
 
             @Override
-            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> received) {
+            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> receivedBatches) {
                 parallelConsumer.pollBatch(pollBatch -> {
                     batchFailPollInner(pollBatch);
-                    received.add(pollBatch);
+                    receivedBatches.add(pollBatch);
                 });
             }
         };

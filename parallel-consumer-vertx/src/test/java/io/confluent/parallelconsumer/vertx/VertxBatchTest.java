@@ -76,11 +76,11 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
             }
 
             @Override
-            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> received) {
+            public void simpleBatchTestPoll(List<List<ConsumerRecord<String, String>>> batchesReceived) {
                 vertxAsync.batchVertxFuture(recordList -> {
                     return vertx.executeBlocking(event -> {
                         log.debug("Saw batch or records: {}", toOffsets(recordList));
-                        received.add(recordList);
+                        batchesReceived.add(recordList);
 
                         event.complete(msg("Saw batch or records: {}", toOffsets(recordList)));
                     });
@@ -88,10 +88,11 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
             }
 
             @Override
-            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> received) {
-                vertxAsync.batchVertxFuture(recordList -> {
-                    batchFailPollInner(recordList);
-                    return Future.succeededFuture(msg("Saw batch or records: {}", toOffsets(recordList)));
+            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> receivedBatches) {
+                vertxAsync.batchVertxFuture(pollBatch -> {
+                    receivedBatches.add(pollBatch);
+                    batchFailPollInner(pollBatch);
+                    return Future.succeededFuture(msg("Saw batch or records: {}", toOffsets(pollBatch)));
                 });
             }
         };
@@ -127,7 +128,7 @@ public class VertxBatchTest extends VertxBaseUnitTest implements BatchTestBase {
 
     @ParameterizedTest
     @EnumSource
-    public void batchFailureTest(Vertx vertx, VertxTestContext tc, ParallelConsumerOptions.ProcessingOrder order) {
+    public void batchFailureTest(ParallelConsumerOptions.ProcessingOrder order, Vertx vertx, VertxTestContext tc) {
         this.vertx = vertx;
         this.tc = tc;
         batchFailureTest(order);

@@ -330,7 +330,14 @@ public abstract class AbstractParallelEoSStreamProcessorTestBase {
     }
 
     public void assertCommitsContains(List<Integer> offsets) {
-        assertThat(extractAllPartitionsOffsetsSequentially()).containsAll(offsets);
+        List<Integer> commits = getCommitHistoryFlattened();
+        assertThat(commits).containsAll(offsets);
+    }
+
+    private List<Integer> getCommitHistoryFlattened() {
+        return (isUsingTransactionalProducer())
+                ? ktu.getProducerCommits(producerSpy)
+                : extractAllPartitionsOffsetsSequentially();
     }
 
     public void assertCommits(List<Integer> offsets, String description) {

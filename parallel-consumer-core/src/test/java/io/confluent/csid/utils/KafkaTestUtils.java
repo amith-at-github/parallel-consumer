@@ -90,6 +90,17 @@ public class KafkaTestUtils {
      */
     public void assertCommits(MockProducer mp, List<Integer> expectedOffsets, Optional<String> description) {
         log.debug("Asserting commits of {}", expectedOffsets);
+        List<Integer> set = getProducerCommits(mp);
+
+        if (!expectedOffsets.contains(0)) {
+            KafkaTestUtils.trimAllGeneisOffset(set);
+        }
+
+        assertThat(set).describedAs(description.orElse("Which offsets are committed and in the expected order"))
+                .containsExactlyElementsOf(expectedOffsets);
+    }
+
+    public List<Integer> getProducerCommits(MockProducer mp) {
         List<Map<String, Map<TopicPartition, OffsetAndMetadata>>> history = mp.consumerGroupOffsetsHistory();
 
         List<Integer> set = history.stream().flatMap(histories -> {
@@ -101,15 +112,9 @@ public class KafkaTestUtils {
                 int offset = (int) commit.offset();
                 results.add(offset);
             }
-            if (expectedOffsets.contains(0)) {
-                return results.stream();
-            } else {
-                return KafkaTestUtils.trimAllGeneisOffset(results).stream();
-            }
+            return results.stream();
         }).collect(Collectors.toList()); // set - ignore repeated commits ({@link OffsetMap})
-
-        assertThat(set).describedAs(description.orElse("Which offsets are committed and in the expected order"))
-                .containsExactlyElementsOf(expectedOffsets);
+        return set;
     }
 
     public void assertCommitLists(MockProducer mp, List<List<Integer>> expectedPartitionOffsets, Optional<String> description) {
