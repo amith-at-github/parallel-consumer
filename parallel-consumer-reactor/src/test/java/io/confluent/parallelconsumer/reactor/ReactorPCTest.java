@@ -3,10 +3,10 @@ package io.confluent.parallelconsumer.reactor;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.csid.utils.LatchTestUtils;
 import io.confluent.csid.utils.ProgressBarUtils;
 import io.confluent.csid.utils.StringUtils;
-import io.confluent.parallelconsumer.ParallelConsumerOptions;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import me.tongfei.progressbar.ProgressBar;
@@ -26,8 +26,6 @@ import static org.awaitility.Awaitility.await;
 @Slf4j
 class ReactorPCTest extends ReactorUnitTestBase {
 
-    protected static final int MAX_CONCURRENCY = 1000;
-
     @BeforeEach
     public void setupData() {
         super.primeFirstRecord();
@@ -35,8 +33,6 @@ class ReactorPCTest extends ReactorUnitTestBase {
 
     @Test
     void kickTires() {
-        initAsyncConsumer(ParallelConsumerOptions.builder().maxConcurrency(MAX_CONCURRENCY).build());
-
         primeFirstRecord();
         primeFirstRecord();
         primeFirstRecord();
@@ -52,7 +48,7 @@ class ReactorPCTest extends ReactorUnitTestBase {
         });
 
         await()
-                .atMost(Duration.ofSeconds(1))
+                .atMost(defaultTimeout)
                 .untilAsserted(() -> {
                     assertWithMessage("Processed records collection so far")
                             .that(msgs.size())
@@ -67,10 +63,8 @@ class ReactorPCTest extends ReactorUnitTestBase {
     @SneakyThrows
     @Test
     void concurrencyTest() {
-        initAsyncConsumer(ParallelConsumerOptions.builder().maxConcurrency(MAX_CONCURRENCY).build());
-
         //
-        var quantity = 100_000;
+        var quantity = 1000;
         var consumerRecords = ktu.generateRecords(quantity - 1); // -1 coz already has 1 record primed (all tests do)
         ktu.send(consumerSpy, consumerRecords);
         log.info("Finished priming records");
@@ -113,8 +107,8 @@ class ReactorPCTest extends ReactorUnitTestBase {
 
                         //
                         int numberOfFinishedRecords = finishedCount.incrementAndGet();
-                        boolean allExpectedRecordsPareProcessed = numberOfFinishedRecords > quantity - 1;
-                        if (allExpectedRecordsPareProcessed) {
+                        boolean allExpectedRecordsAreProcessed = numberOfFinishedRecords > quantity - 1;
+                        if (allExpectedRecordsAreProcessed) {
                             // release the latch to indicate processing complete
                             completeOrProblem.countDown();
                         }
@@ -134,7 +128,7 @@ class ReactorPCTest extends ReactorUnitTestBase {
         //
         await()
                 // perform testing for at least some time - see fail fast
-                .atMost(Duration.ofSeconds(2))
+                .atMost(defaultTimeout)
                 // make sure out for processing recs never exceeds max concurrency
                 .failFast("Max concurrency exceeded", () -> msgs.size() > maxConcurrency)
                 .untilAsserted(() -> {
