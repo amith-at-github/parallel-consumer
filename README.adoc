@@ -417,6 +417,7 @@ Where `${project.version}` is the version to be used:
 
         return eosStreamProcessor;
 ----
+
 <1> Setup your clients as per normal.
 A Producer is only required if using the `produce` flows.
 <2> Choose your ordering type, `KEY` in this case.
@@ -501,7 +502,7 @@ Using this, you can process batches of messages at once.
 
 To use it, use one of the `batch` versions instead.
 
-Note: if an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
+IMPORTANT: If an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
 There is no guarantee that the messages will be retried again in the same batch.
 
 .Usage
@@ -514,19 +515,6 @@ There is no guarantee that the messages will be retried again in the same batch.
             // process the entire batch payload at once
             processBatchPayload(payload);
         });
-        // end::circuitBreaker[]
-    }
-
-    private void processBatchPayload(List<String> payload) {
-
-    }
-
-    private String pareparePayload(ConsumerRecord<String, String> x) {
-        return null;
-    }
-
-}
-
 
 ==== Restrictions
 
@@ -545,6 +533,7 @@ There is no guarantee that the messages will be retried again in the same batch.
             return new RequestInfo("localhost", port, "/api", params); // <1>
         });
 ----
+
 <1> Simply return an object representing the request, the Vert.x HTTP engine will handle the rest, using it's non-blocking engine
 
 See the link:{project_root}/parallel-consumer-examples/parallel-consumer-example-vertx/src/main/java/io/confluent/parallelconsumer/examples/vertx/VertxApp.java[Vert.x example] project, and it's test.
@@ -596,6 +585,7 @@ image::https://lucid.app/publicSegments/view/43f2740c-2a7f-4b7f-909e-434a5bbe3fb
         });
     }
 ----
+
 <1> Setup your Kafka Streams stage as per normal, performing any type of preprocessing in Kafka Streams
 <2> For the slow consumer part of your Topology, drop down into the parallel consumer, and use massive concurrency
 
@@ -949,8 +939,8 @@ Run a specific integration test method in a submodule project, skipping unit tes
 `mvn -Dit.test=TransactionAndCommitModeTest#testLowMaxPoll -DskipUTs=true verify  -DfailIfNoTests=false --projects parallel-consumer-core`
 
 Run `git bisect` to find a bad commit, edit the Maven command in `bisect.sh` and run::
-[source=bash]
 
+[source=bash]
 ----
 git bisect start good bad
 git bisect run ./bisect.sh
