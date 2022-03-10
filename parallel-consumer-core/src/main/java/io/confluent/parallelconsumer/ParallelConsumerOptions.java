@@ -126,6 +126,10 @@ public class ParallelConsumerOptions<K, V> {
      * Controls the maximum degree of concurrency to occur. Used to limit concurrent calls to external systems to a
      * maximum to prevent overloading them or to a degree, using up quotas.
      * <p>
+     * When using {@link #getBatchSize()}, this is over and above the batch size setting. So for example, a {@link
+     * #getMaxConcurrency()} of {@code 2} and a batch size of {@code 3} would result in at most {@code 15} records being
+     * processed at once.
+     * <p>
      * A note on quotas - if your quota is expressed as maximum concurrent calls, this works well. If it's limited in
      * total requests / sec, this may still overload the system. See towards the distributed rate limiting feature for
      * this to be properly addressed: https://github.com/confluentinc/parallel-consumer/issues/24 Add distributed rate
@@ -135,8 +139,8 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * It's recommended to set this quite high, much higher than core count, as it's expected that these threads will
      * spend most of their time blocked waiting for IO. For automatic setting of this variable, look out for issue
-     * https://github.com/confluentinc/parallel-consumer/issues/21 Dynamic concurrency control with flow control or tcp
-     * congestion control theory #21.
+     * https://github.com/confluentinc/parallel-consumer/issues/21 Dynamic concurrency control with flow contr  ol or
+     * tcp congestion control theory #21.
      */
     @Builder.Default
     private final int maxConcurrency = DEFAULT_MAX_CONCURRENCY;

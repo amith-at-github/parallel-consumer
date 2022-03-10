@@ -505,8 +505,15 @@ To use it, use one of the `batch` versions instead.
 IMPORTANT: If an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
 There is no guarantee that the messages will be retried again in the same batch.
 
-.Usage
+==== Usage
+
 [source,java,indent=0]
+        ParallelStreamProcessor.createEosStreamProcessor(ParallelConsumerOptions.<String, String>builder()
+                .consumer(getKafkaConsumer())
+                .producer(getKafkaProducer())
+                .maxConcurrency(100)
+                .batchSize(5)
+                .build());
         parallelConsumer.pollBatch(batchOfRecords -> {
             // convert the batch into the payload for our processing
             List<String> payload = batchOfRecords.stream()

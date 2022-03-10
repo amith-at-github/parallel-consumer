@@ -459,7 +459,8 @@ To use it, use one of the `batch` versions instead.
 IMPORTANT: If an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
 There is no guarantee that the messages will be retried again in the same batch.
 
-.Usage
+==== Usage
+
 [source,java,indent=0]
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=batching]
 

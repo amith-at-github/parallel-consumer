@@ -56,6 +56,14 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
+
+    private void validateBatch() {
+        //noinspection SimplifyOptionalCallChains - only in 11
+        if (!options.getBatchSize().isPresent()) {
+            throw new IllegalArgumentException(msg("Using batching version of the API, but no batch size specified in the `options`. See {}", getLinkHtmlToDocSection("#batching")));
+        }
+    }
+
     private void validateNonBatch() {
         if (options.getBatchSize().isPresent()) {
             throw new IllegalArgumentException(msg("A 'batch size' has been specified in `options`, so you must use the `batch` versions of the polling methods. See {}", getLinkHtmlToDocSection("#batching")));
@@ -135,9 +143,4 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
-    private void validateBatch() {
-        if (!options.getBatchSize().isPresent()) {
-            throw new IllegalArgumentException("Using batching function, but no batch size specified in options");
-        }
-    }
 }

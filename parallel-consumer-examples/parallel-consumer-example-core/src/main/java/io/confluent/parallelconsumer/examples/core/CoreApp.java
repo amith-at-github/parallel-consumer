@@ -198,7 +198,12 @@ public class CoreApp {
 
     void batching() {
         // tag::batching[]
-
+        ParallelStreamProcessor.createEosStreamProcessor(ParallelConsumerOptions.<String, String>builder()
+                .consumer(getKafkaConsumer())
+                .producer(getKafkaProducer())
+                .maxConcurrency(100)
+                .batchSize(5)
+                .build());
         parallelConsumer.pollBatch(batchOfRecords -> {
             // convert the batch into the payload for our processing
             List<String> payload = batchOfRecords.stream()
