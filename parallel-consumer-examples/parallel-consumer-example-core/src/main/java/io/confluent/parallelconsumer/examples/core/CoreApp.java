@@ -202,7 +202,7 @@ public class CoreApp {
                 .consumer(getKafkaConsumer())
                 .producer(getKafkaProducer())
                 .maxConcurrency(100)
-                .batchSize(5)
+                .batchSize(5) // <1>
                 .build());
         parallelConsumer.pollBatch(batchOfRecords -> {
             // convert the batch into the payload for our processing

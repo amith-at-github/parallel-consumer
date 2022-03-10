@@ -508,11 +508,12 @@ There is no guarantee that the messages will be retried again in the same batch.
 ==== Usage
 
 [source,java,indent=0]
+----
         ParallelStreamProcessor.createEosStreamProcessor(ParallelConsumerOptions.<String, String>builder()
                 .consumer(getKafkaConsumer())
                 .producer(getKafkaProducer())
                 .maxConcurrency(100)
-                .batchSize(5)
+                .batchSize(5) // <1>
                 .build());
         parallelConsumer.pollBatch(batchOfRecords -> {
             // convert the batch into the payload for our processing
@@ -522,6 +523,9 @@ There is no guarantee that the messages will be retried again in the same batch.
             // process the entire batch payload at once
             processBatchPayload(payload);
         });
+----
+
+<1> Choose your batch size.
 
 ==== Restrictions
 

@@ -462,7 +462,11 @@ There is no guarantee that the messages will be retried again in the same batch.
 ==== Usage
 
 [source,java,indent=0]
+----
 include::{project_root}/parallel-consumer-examples/parallel-consumer-example-core/src/main/java/io/confluent/parallelconsumer/examples/core/CoreApp.java[tag=batching]
+----
+
+<1> Choose your batch size.
 
 ==== Restrictions
 
