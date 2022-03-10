@@ -437,7 +437,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      * should be downloaded (or pipelined in the Consumer)
      */
     public boolean isSufficientlyLoaded() {
-        return getAmountOfWorkQueuedWaitingIngestion() > options.getTargetRecordsOutForProcessing() * getLoadingFactor();
+        return getAmountOfWorkQueuedWaitingIngestion() > options.getTargetAmountOfRecordsInFlight() * getLoadingFactor();
     }
 
     private int getLoadingFactor() {
@@ -453,7 +453,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
     }
 
     public boolean isWorkInFlightMeetingTarget() {
-        return getNumberRecordsOutForProcessing() >= options.getTargetRecordsOutForProcessing();
+        return getNumberRecordsOutForProcessing() >= options.getTargetAmountOfRecordsInFlight();
     }
 
     /**
@@ -523,6 +523,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     public boolean isStarvedForNewWork() {
         long queued = getTotalWorkAwaitingIngestion();
-        return queued < options.getTargetRecordsOutForProcessing();
+        return queued < options.getTargetAmountOfRecordsInFlight();
     }
 }

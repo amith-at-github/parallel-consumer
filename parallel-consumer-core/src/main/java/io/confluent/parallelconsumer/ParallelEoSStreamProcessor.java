@@ -23,12 +23,6 @@ import static io.confluent.parallelconsumer.internal.UserFunctions.carefullyRun;
 public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamProcessor<K, V>
         implements ParallelStreamProcessor<K, V> {
 
-// todo remove
-//    /**
-//     * The number of messages to attempt pass into the {@link #pollBatch} user function
-//     */
-//    private int batchLevel = 5;
-
     /**
      * Construct the AsyncConsumer by wrapping this passed in conusmer and producer, which can be configured any which
      * way as per normal.
@@ -60,11 +54,9 @@ public class ParallelEoSStreamProcessor<K, V> extends AbstractParallelEoSStreamP
         supervisorLoop(wrappedUserFunc, voidCallBack);
     }
 
-
-
     private void validateNonBatch() {
         if (options.getBatchSize().isPresent()) {
-            throw new IllegalArgumentException("Batch size specified, but not using batch function");
+            throw new IllegalArgumentException("A 'batch size' has been specified in `options`, so you must use the `batch` versions of the polling methods. See ");
         }
     }
 

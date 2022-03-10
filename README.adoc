@@ -220,6 +220,7 @@ without operational burden or harming the cluster's performance
 * Solution for the https://en.wikipedia.org/wiki/Head-of-line_blocking["head of line"] blocking problem where continued failure of a single message, prevents progress for messages behind it in the queue
 * Per `key` concurrent processing, per partition and unordered message processing
 * Offsets committed correctly, in order, of only processed messages, regardless of concurrency level or retries
+* Batch version fo the API to process batches of messages in parallel instead of single messages.
 * Vert.x and Reactor.io non-blocking library integration
 ** Non-blocking I/O work management
 ** Vert.x's WebClient and general Vert.x Future support
@@ -491,6 +492,46 @@ You have the option to either use callbacks to be notified of events, or use the
 * `JStreamVertxParallelStreamProcessor`
 
 In future versions, we plan to look at supporting other streaming systems like https://github.com/ReactiveX/RxJava[RxJava] via modules.
+
+[[batching]]
+=== Batching
+
+The library also support a batch version of the API.
+Using this, you can process batches of messages at once.
+
+To use it, use one of the `batch` versions instead.
+
+Note: if an exception is thrown while processing the batch, all messages in the batch will be returned to the queue, to be retried with the standard retry system.
+There is no guarantee that the messages will be retried again in the same batch.
+
+.Usage
+[source,java,indent=0]
+        parallelConsumer.pollBatch(batchOfRecords -> {
+            // convert the batch into the payload for our processing
+            List<String> payload = batchOfRecords.stream()
+                    .map(this::pareparePayload)
+                    .collect(Collectors.toList());
+            // process the entire batch payload at once
+            processBatchPayload(payload);
+        });
+        // end::circuitBreaker[]
+    }
+
+    private void processBatchPayload(List<String> payload) {
+
+    }
+
+    private String pareparePayload(ConsumerRecord<String, String> x) {
+        return null;
+    }
+
+}
+
+
+==== Restrictions
+
+- If using a batch version of the API, you must choose a batch size in the options class.
+- If a batch size is chosen, the "normal" APIs cannot be used, and an error will be thrown.
 
 [[http-with-vertx]]
 === HTTP with the Vert.x Module
@@ -830,7 +871,6 @@ For features in development, have a look at the https://github.com/confluentinc/
 * https://github.com/confluentinc/parallel-consumer/issues/24[Distributed rate limiting]
 * https://github.com/confluentinc/parallel-consumer/issues/27[Metrics]
 * More customisable handling[https://github.com/confluentinc/parallel-consumer/issues/65] of HTTP interactions
-* Chance to https://github.com/confluentinc/parallel-consumer/issues/18[batch multiple consumer records] into a single or multiple http request objects
 
 === Long Term - The future ☁️
 

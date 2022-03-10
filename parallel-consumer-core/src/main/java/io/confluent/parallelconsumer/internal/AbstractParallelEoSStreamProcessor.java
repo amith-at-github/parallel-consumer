@@ -624,7 +624,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
                 // can occur
                 log.debug("Found Poller paused with not enough front loaded messages, ensuring poller is awake (mail: {} vs target: {})",
                         wm.getAmountOfWorkQueuedWaitingIngestion(),
-                        options.getTargetRecordsOutForProcessing());
+                        options.getTargetAmountOfRecordsInFlight());
                 brokerPollSubsystem.wakeupIfPaused();
             }
         }
@@ -796,7 +796,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * Checks the system has enough pressure in the pipeline of work, if not attempts to step up the load factor.
      */
     protected void checkPipelinePressure() {
-        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getAmountOfWorkQueuedWaitingIngestion() > options.getTargetRecordsOutForProcessing();
+        boolean moreWorkInQueuesAvailableThatHaveNotBeenPulled = wm.getAmountOfWorkQueuedWaitingIngestion() > options.getTargetAmountOfRecordsInFlight();
         if (log.isTraceEnabled())
             log.trace("Queue pressure check: (current size: {}, loaded target: {}, factor: {}) " +
                             "if (isPoolQueueLow() {} && moreWorkInQueuesAvailableThatHaveNotBeenPulled {} && lastWorkRequestWasFulfilled {}))",
@@ -824,7 +824,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return aim to never have the pool queue drop below this
      */
     private int getPoolLoadTarget() {
-        return options.getTargetRecordsOutForProcessing();
+        return options.getTargetAmountOfRecordsInFlight();
     }
 
     private boolean isPoolQueueLow() {
@@ -912,7 +912,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @return either the duration until next commit, or next work retry
      * @see WorkManager#isStarvedForNewWork()
      * @see WorkManager#getTotalWorkAwaitingIngestion()
-     * @see ParallelConsumerOptions#getTargetRecordsOutForProcessing()
+     * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
     private Duration getTimeToBlockFor() {
         // todo cleanup

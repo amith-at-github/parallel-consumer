@@ -31,7 +31,7 @@ public abstract class ExternalEngine<K, V> extends AbstractParallelEoSStreamProc
     @Override
     protected int calculateQuantityToRequest() {
         int numberRecordsOutForProcessing = wm.getNumberRecordsOutForProcessing();
-        int target = getOptions().getTargetRecordsOutForProcessing();
+        int target = getOptions().getTargetAmountOfRecordsInFlight();
         int rawDelta = target - numberRecordsOutForProcessing;
 
         //

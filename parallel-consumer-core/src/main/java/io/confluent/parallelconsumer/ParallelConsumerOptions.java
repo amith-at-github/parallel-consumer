@@ -109,24 +109,6 @@ public class ParallelConsumerOptions<K, V> {
         PERIODIC_CONSUMER_ASYNCHRONOUS
 
     }
-    // todo remove
-//
-//    /**
-//     * When using batching, the initialDynamicLoadFactor must be higher than without batching. It could be set to
-//     * batchsize * 2, but it is exposed here for providing the user a configuration option. When it is not set, the
-//     * defaultInitialLoadingFactor specified in {@link DynamicLoadFactor} is
-//     * used.
-//     */
-//    private final Integer initialDynamicLoadFactor;
-//
-//    /**
-//     * When using batching, the received batch size often is considerably lower than the requested batch size. This may
-//     * be a problem when a certain batch size is expected for communication with an external system (e.g. a Web Service
-//     * that works best when sending 50 events per request). This parameter allows slowing down the processor thread,
-//     * such that enough messages are received to closely fulfill the requested batch size.
-//     */
-//    @Builder.Default
-//    public final Integer processorDelayMs = 0;
 
     /**
      * The {@link ProcessingOrder} type to use
@@ -207,11 +189,14 @@ public class ParallelConsumerOptions<K, V> {
      * <p>
      * Note that there is no relationship between the Consumer setting of {@code max.poll.records} and this configured
      * batch size, as this library introduces a large layer of indirection between the managed consumer, and the managed
-     * queues we use. This indirection effectively disconnects the processing of messages from "polling" them from the
-     * managed client, as we do not wait to process them before calling poll again. We simply call poll as much as we
-     * need to in order to keep our queues full with enough work to satisfy demand - and if we have enough then we
-     * actively manage pausing our subscription so that we can continue calling {@code poll} without pulling in even
-     * more messages.
+     * queues we use.
+     * <p>
+     * This indirection effectively disconnects the processing of messages from "polling" them from the managed client,
+     * as we do not wait to process them before calling poll again. We simply call poll as much as we need to, in order
+     * to keep our queues full of enough work to satisfy demand.
+     * <p>
+     * If we have enough, then we actively manage pausing our subscription so that we can continue calling {@code poll}
+     * without pulling in even more messages.
      */
     private final Integer batchSize;
 
@@ -225,8 +210,7 @@ public class ParallelConsumerOptions<K, V> {
     /**
      * @return the combined target of the desired concurrency by the configured batch size
      */
-    // todo rename
-    public int getTargetRecordsOutForProcessing() {
+    public int getTargetAmountOfRecordsInFlight() {
         return getMaxConcurrency() * getBatchSize().orElse(1);
     }
 
