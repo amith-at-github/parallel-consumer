@@ -68,9 +68,10 @@ public class ReactorBatchTest extends ReactorUnitTestBase implements BatchTestBa
             }
 
             @Override
-            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> receivedBatches) {
+            protected void batchFailPoll(List<List<ConsumerRecord<String, String>>> batchesReceived) {
                 reactorPC.reactBatch(recordList -> {
                     batchFailPollInner(recordList);
+                    batchesReceived.add(recordList);
                     return Mono.just(msg("Saw batch or records: {}", toOffsets(recordList)));
                 });
             }
