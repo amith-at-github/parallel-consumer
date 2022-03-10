@@ -97,10 +97,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
 
     private final RateLimiter slowWarningRateLimit = new RateLimiter(5);
 
-    // todo remove?
-    @Getter
-    private Duration nextLowestRetryTime;
-
     /**
      * Use a private {@link DynamicLoadFactor}, useful for testing.
      */
@@ -196,19 +192,6 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
      */
     // todo refactor - move into it's own class perhaps
     public List<WorkContainer<K, V>> maybeGetWorkIfAvailable(int requestedMaxWorkToRetrieve) {
-//        // TODO: this is just a temporary solution to allow for more messages to arrive before batches are created.
-//        // This ensures an average batch size that is more close to the requested batch size, since this method will
-//        // return more work. Probably this should be refactored to be part of the method "tryToEnsureAvailableCapacity".
-//        // TODO: Also we should only wait in case not enough records are present.
-//        try {
-//            Thread.sleep(getOptions().getProcessorDelayMs());
-//        } catch (InterruptedException e) {
-//            e.printStackTrace();
-//        }
-
-        // any work available to retried with system constraints, will be done so now
-        resetNextLowestRetryTimeAt();
-
         int workToGetDelta = requestedMaxWorkToRetrieve;
 
         // optimise early
@@ -377,20 +360,7 @@ public class WorkManager<K, V> implements ConsumerRebalanceListener {
         // error occurred, put it back in the queue if it can be retried
         wc.fail(clock);
         sm.onFailure(wc);
-        updateNextLowestRetryTimeAt(wc);
         numberRecordsOutForProcessing--;
-    }
-
-    private void resetNextLowestRetryTimeAt() {
-        this.nextLowestRetryTime = null;
-    }
-
-    private void updateNextLowestRetryTimeAt(WorkContainer<K, V> wc) {
-        Duration thisDue = wc.getDelayUntilRetryDue();
-        boolean thisWorkNeedsRetrySooner = this.nextLowestRetryTime == null || thisDue.compareTo(this.nextLowestRetryTime) < 0;
-        if (thisWorkNeedsRetrySooner) {
-            this.nextLowestRetryTime = thisDue;
-        }
     }
 
     public long getNumberOfEntriesInPartitionQueues() {

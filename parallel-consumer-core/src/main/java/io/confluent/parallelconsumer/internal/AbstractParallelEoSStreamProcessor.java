@@ -140,7 +140,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     private Exception failureReason;
 
     /**
-     * todo docs
+     * Time of last successful commit
      */
     private Instant lastCommitTime;
 
@@ -724,7 +724,9 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         }
     }
 
-    private <R> void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction, final Consumer<R> callback, final List<WorkContainer<K, V>> batch) {
+    private <R> void submitWorkToPoolInner(final Function<List<ConsumerRecord<K, V>>, List<R>> usersFunction,
+                                           final Consumer<R> callback,
+                                           final List<WorkContainer<K, V>> batch) {
         // for each record, construct dispatch to the executor and capture a Future
         log.trace("Sending work ({}) to pool", batch);
         Future outputRecordFuture = workerThreadPool.submit(() -> {
@@ -915,38 +917,14 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see ParallelConsumerOptions#getTargetAmountOfRecordsInFlight()
      */
     private Duration getTimeToBlockFor() {
-        // todo cleanup
-        // old
-
-        //        // if paused, we won't be doing any work
-//        boolean workAvailable = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
-//        boolean noWorkToDoAndStillRunning = workMailBox.isEmpty() && state.equals(running) && !workAvailable;
-
-//        // todo possible remove this check and just use the time calculation? - yes
-//        boolean shouldLongPoll = noWorkToDoAndStillRunning;
-//        if (noWorkToDoAndStillRunning && isShouldCommitNow()) {
-//            log.debug("Should long poll, however it's time to commit");
-//        }
-
-
-        // new
-
-//        synchronized (wm)
-        {
-            // should not block as not enough work is being done, and there's more work to ingest
-            boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
-            if (ingestionWorkAndStarved) {
-                log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
-                return Duration.ofMillis(0);
-            }
+        // should not block as not enough work is being done, and there's more work to ingest
+        boolean ingestionWorkAndStarved = wm.hasWorkAwaitingIngestionToShards() && wm.isStarvedForNewWork();
+        if (ingestionWorkAndStarved) {
+            log.debug("Work waiting to be ingested, and not enough work in flight - will not block");
+            return Duration.ofMillis(0);
         }
-
-        // broker poller will interrupt the control thread, if it has records to offer while the system is starving for new work
-//        Duration effectiveCommitAttemptDelay = isShouldCheckCommitNow() ? Duration.ofMillis(0) : getTimeToNextCommitCheck();
-
-
         // if less than target work already in flight, don't sleep longer than the next retry time for failed work, if it exists - so that we can wake up and maybe retry the failed work
-        if (!wm.isWorkInFlightMeetingTarget()) {
+        else if (!wm.isWorkInFlightMeetingTarget()) {
             // though check if we have work awaiting retry
             var lowestScheduledOpt = wm.getLowestRetryTime();
             if (lowestScheduledOpt.isPresent()) {
@@ -962,6 +940,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
             }
         }
 
+        //
         Duration effectiveCommitAttemptDelay = getTimeToNextCommitCheck();
         log.debug("Blocking normally until next commit time of {}", effectiveCommitAttemptDelay);
         return effectiveCommitAttemptDelay;
@@ -972,33 +951,10 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      */
     private void commitOffsetsMaybe() {
         if (isShouldCommitNow()) {
-//            if (poolQueueLow) {
-//                /*
-//                Shouldn't be needed if pressure system is working, unless commit frequency target too high or too much
-//                information to encode into offset payload.
-//                // TODO should be able to change this so that it checks with the work manager if a commit would help - i.e. are partitions blocked by offset encoding?
-//                */
-//                log.warn("Pool queue too low ({}), may be because of back pressure from encoding offsets, so committing", getWorkerQueueSize());
-//            }
             commitOffsetsThatAreReady();
         }
-//        else {
-//            if (log.isDebugEnabled()) {
-//                if (wm.hasCommittableOffsets()) {
-//                    log.debug("Have offsets to commit, but not enough time elapsed ({}), waiting for at least {}...", getTimeSinceLastCommitAttempt(), timeBetweenCommits);
-//                } else {
-//                    log.trace("Could commit now, but no offsets committable");
-//                }
-//            }
-//        }
         updateLastCommitCheckTime();
     }
-
-//    private boolean isShouldCheckCommitNow() {
-//        lastCommitCheckTime.plus(options.get)
-//        Duration elapsedSinceLast = getTimeSinceLastCheck();
-//    }
-
 
     private boolean isShouldCommitNow() {
         Duration elapsedSinceLastCommit = this.lastCommitTime == null ? Duration.ofDays(1) : Duration.between(this.lastCommitTime, Instant.now());
@@ -1073,8 +1029,8 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         synchronized (commitCommand) {
             committer.retrieveOffsetsAndCommit();
             clearCommitCommand();
+            this.lastCommitTime = Instant.now();
         }
-        this.lastCommitTime = Instant.now();
     }
 
     private void updateLastCommitCheckTime() {
@@ -1164,7 +1120,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
      * @see #blockableControlThread
      */
     public void notifySomethingToDo() {
-//        if (currentlyPollingWorkCompleteMailBox.get()) {
         boolean noTransactionInProgress = !producerManager.map(ProducerManager::isTransactionInProgress).orElse(false);
         if (noTransactionInProgress) {
             log.trace("Interrupting control thread: Knock knock, wake up! You've got mail (tm)!");
@@ -1172,9 +1127,6 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         } else {
             log.trace("Would have interrupted control thread, but TX in progress");
         }
-//        } else {
-//            log.trace("Work box not being polled currently, so thread not blocked, will come around to the bail box in the next loop.");
-//        }
     }
 
     @Override

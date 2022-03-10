@@ -35,7 +35,6 @@ import static org.assertj.core.util.Lists.list;
 import static org.awaitility.Awaitility.waitAtMost;
 import static pl.tlinkowski.unij.api.UniLists.of;
 
-//@Isolated // performance sensitive
 @Slf4j
 class MultiInstanceHighVolumeTest extends BrokerIntegrationTest<String, String> {
 

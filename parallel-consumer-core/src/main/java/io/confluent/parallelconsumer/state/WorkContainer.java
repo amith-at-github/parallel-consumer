@@ -60,12 +60,6 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private Optional<Boolean> userFunctionSucceeded = Optional.empty();
 
     /**
-     * Wait this long before trying again
-     */
-    // todo check it this dead code?
-    private Duration retryDelay;
-
-    /**
      * @see ParallelConsumerOptions#getDefaultMessageRetryDelay()
      */
     @Setter
@@ -132,7 +126,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     private Temporal tryAgainAt(WallClock clock) {
         if (failedAt.isPresent()) {
             // previously failed, so add the delay to the last failed time
-            Duration retryDelay = getRetryDelay();
+            Duration retryDelay = getRetryDelayConfig();
             return failedAt.get().plus(retryDelay);
         } else {
             // never failed, so no try again delay
@@ -143,16 +137,12 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     /**
      * @return the delay between retries e.g. retry after 1 second
      */
-    // todo rename away from #getDelayUntilRetryDue
-    public Duration getRetryDelay() {
+    public Duration getRetryDelayConfig() {
         var retryDelayProvider = ParallelConsumerOptions.retryDelayProviderStatic;
         if (retryDelayProvider != null) {
             return retryDelayProvider.apply(this);
         } else {
-            if (retryDelay == null)
-                return defaultRetryDelay;
-            else
-                return retryDelay;
+            return defaultRetryDelay;
         }
     }
 
@@ -221,7 +211,7 @@ public class WorkContainer<K, V> implements Comparable<WorkContainer> {
     }
 
     public boolean isAvailableToTakeAsWork() {
-        // missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
+        // todo missing boolean notAllowedMoreRecords = pm.isBlocked(topicPartition);
         return isNotInFlight() && !isUserFunctionSucceeded() && hasDelayPassed(normalClock);
     }
 }

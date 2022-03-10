@@ -217,13 +217,13 @@ class WorkManagerTest {
         wc = works.get(0);
         wm.onFailure(wc);
 
-        advanceClock(wc.getRetryDelay().minus(ofSeconds(1)));
+        advanceClock(wc.getRetryDelayConfig().minus(ofSeconds(1)));
 
         works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of());
 
         // increased advance to allow for bigger delay under high load during parallel test execution.
-        advanceClock(wc.getRetryDelay().plus(ofSeconds(1)));
+        advanceClock(wc.getRetryDelayConfig().plus(ofSeconds(1)));
 
         works = wm.maybeGetWorkIfAvailable(max);
         assertOffsets(works, of(0));

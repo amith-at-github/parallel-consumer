@@ -92,15 +92,12 @@ public class ShardManager<K, V> {
     /**
      * @return Work ready in the processing shards, awaiting selection as work to do
      */
-    // todo rename to "number"
     public long getNumberOfWorkQueuedInShardsAwaitingSelection() {
         long count = this.processingShards.values().parallelStream()
                 .flatMap(x -> x.values().stream())
-                // missing pm.isBlocked(topicPartition) ?
+                // todo missing pm.isBlocked(topicPartition) ?
                 .filter(WorkContainer::isAvailableToTakeAsWork)
                 .count();
-//                .mapToInt(Map::size)
-//                .sum();
         return count;
     }
 

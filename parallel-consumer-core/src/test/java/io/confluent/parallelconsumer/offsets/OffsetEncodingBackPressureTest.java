@@ -63,8 +63,6 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         // make sure work manager doesn't queue more than MAX_TO_QUEUE
 //        final int numRecords = 1_000_0;
         final int numberOfRecords = 1_00;
-        // todo delete
-//        parallelConsumer.setLongPollTimeout(ofMillis(200));
         parallelConsumer.setTimeBetweenCommits(ofSeconds(1));
 
         // todo - very smelly - store for restoring
@@ -133,7 +131,6 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                         .hasCommittedToAnyPartition()
                         .offset(0);
                 List<OffsetAndMetadata> offsetAndMetadataList = extractAllPartitionsOffsetsAndMetadataSequentially();
-//                OffsetAndMetadata mostRecentCommit = offsetAndMetadataList.get(offsetAndMetadataList.size() - numberOfBlockedMessages);
                 OffsetAndMetadata mostRecentCommit = getLast(offsetAndMetadataList).get();
                 assertThat(mostRecentCommit.offset()).isZero();
 

@@ -3,7 +3,9 @@ package io.confluent.parallelconsumer.reactor;
 /*-
  * Copyright (C) 2020-2022 Confluent, Inc.
  */
+
 import io.confluent.parallelconsumer.ParallelConsumerOptions;
+import io.confluent.parallelconsumer.ParallelStreamProcessor;
 import io.confluent.parallelconsumer.internal.ExternalEngine;
 import io.confluent.parallelconsumer.state.WorkContainer;
 import lombok.SneakyThrows;
@@ -64,6 +66,8 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
     }
 
     /**
+     * Like {@link ParallelStreamProcessor#pollBatch} but for Reactor.
+     * <p>
      * Register a function to be applied to a batch of messages.
      * <p>
      * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
@@ -77,6 +81,7 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
      *
      * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
      *                        their work.
+     * @see ParallelStreamProcessor#pollBatch
      * @see ParallelConsumerOptions#getBatchSize()
      */
     public void reactBatch(Function<List<ConsumerRecord<K, V>>, Publisher<?>> reactorFunction) {
@@ -146,10 +151,12 @@ public class ReactorProcessor<K, V> extends ExternalEngine<K, V> {
 
     /**
      * Make sure that you do any work immediately in a Publisher / Flux - do not block this thread.
+     * <p>
+     * Like {@link #reactBatch} but no batching - single message at a time.
      *
      * @param reactorFunction user function that takes a single record, and returns some type of Publisher to process
      *                        their work.
-     * @see ParallelConsumerOptions#batchSize
+     * @see #reactBatch(Function)
      */
     public void react(Function<ConsumerRecord<K, V>, Publisher<?>> reactorFunction) {
         // wrap single record function in batch function

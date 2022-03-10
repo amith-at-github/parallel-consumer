@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Basic tests for batch processing functionality
  */
-//@Timeout(value = 1, unit = MINUTES)
 @Slf4j
 public class CoreBatchTest extends ParallelEoSStreamProcessorTestBase implements BatchTestBase {
 
