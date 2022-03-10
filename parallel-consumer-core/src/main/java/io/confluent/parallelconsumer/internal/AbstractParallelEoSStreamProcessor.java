@@ -772,13 +772,17 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
     }
 
 
+//    /**
+//     * Pluggable interface for instructing the framework how many work units to attempt to retrieve from the {@link
+//     * WorkManager} for this control loop
+//     *
+//     * @return number of {@link WorkContainer} to try to get
+//     */
+
     /**
-     * Pluggable interface for instructing the framework how many work units to attempt to retrieve from the {@link
-     * WorkManager} for this control loop
-     *
      * @return number of {@link WorkContainer} to try to get
      */
-    protected int calculateQuantityToRequest() {
+    private int calculateQuantityToRequest() {
         int target = getQueueTargetLoaded();
         int current = wm.getNumberRecordsOutForProcessing();
         int delta = target - current;
@@ -788,7 +792,7 @@ public abstract class AbstractParallelEoSStreamProcessor<K, V> implements Parall
         return delta;
     }
 
-    private int getQueueTargetLoaded() {
+    protected int getQueueTargetLoaded() {
         //noinspection unchecked
         int batch = (int) options.getBatchSize().orElse(1);
         return getPoolLoadTarget() * dynamicExtraLoadFactor.getCurrentFactor() * batch;

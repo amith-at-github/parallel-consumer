@@ -95,7 +95,7 @@ public abstract class BatchTestMethods<POLL_RETURN> {
         log.debug("Processed {} records in {} ms. Average batch size was: {}. {} records per second.", numRecsExpected, duration, averageBatchSize, numRecsExpected / (duration / 1000.0));
 
         //
-        double targetMetThreshold = 2. / 4.;
+        double targetMetThreshold = 3. / 4.;
         double acceptableAttainedBatchSize = targetBatchSize * targetMetThreshold;
         assertThat(averageBatchSize).isGreaterThan(acceptableAttainedBatchSize);
 

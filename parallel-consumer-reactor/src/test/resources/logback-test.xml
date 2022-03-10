@@ -33,13 +33,11 @@
     <!--    <logger name="io.confluent.parallelconsumer.internal.AbstractParallelEoSStreamProcessor" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.internal.BrokerPollSystem" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.internal.ConsumerManager" level="debug"/>-->
-    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="info"/>
+    <!--    <logger name="io.confluent.parallelconsumer.state.WorkManager" level="info"/>-->
 
 
     <!--    <logger name="io.confluent.parallelconsumer.vertx.VertxBatchTest" level="debug"/>-->
     <!--    <logger name="io.confluent.parallelconsumer.BatchTestMethods" level="debug"/>-->
-
-    <logger name="org.apache.kafka.common.config.AbstractConfig" level="error"/>
 
     <!--    <logger name="io.confluent.parallelconsumer" level="debug"/>-->
     <!--    <logger name="io.confluent.csid" level="debug"/>-->
